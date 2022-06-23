@@ -155,6 +155,54 @@ const Counter = stable(() => {
 });
 ```
 
+There are 3 kinds of signal: computed, emittable, and normal signals
+
+```js
+// normal signal, you can update it by using set() function or assign new value to countSignal.state
+const countSignal = signal(0);
+const factorSignal = signal(1);
+
+// contruct computed signal. The computed signal retrieves the computed function, this function will be called every time its dependency signals are updated
+// in this case, it depends on countSignal and factorSignal
+const bigCountSignal = signal(() => {
+  return countSignal.get() * factorSignal.get();
+});
+// you can update the computed signal, but you must be aware that when its dependency signals are changed, it receives a new value from a computed function
+const accessTokenSignal = signal("USER_ACCESS_TOKEN");
+// computed signal can works with async function
+const userProfileSignal = signal(async () => {
+  const accessToken = accessTokenSignal.get();
+  if (!accessToken) return { name: "Anonymous" };
+  const profile = await getUserProfile(accessToken);
+  return pofile;
+});
+
+const updateEmail = async (email) => {
+  // call API to update profile email
+  await updateEmail(userProfileSignal.get().id, email);
+  // update signal state to make sure all UI are updated as well
+  userProfileSignal.set((prev) => ({
+    ...prev,
+    email,
+  }));
+};
+
+const logout = () => {
+  // after clearing access token, userProfileSignal will re-compute and its stable will be { name: "Anonymous" }
+  accessTokenSignal.set("");
+};
+
+// construct emittable signal, the emittable signal retrieves a reducer (yep, it is like Redux reducer)
+const counterSignal = signal(0, (state, action) => {
+  if (action === "increment") return state + 1;
+  if (action === "decrement") return state - 1;
+  return state;
+});
+
+counterSignal.emit("increment");
+counterSignal.emit("decrement");
+```
+
 ### Performance Test
 
 https://codesandbox.io/s/rativ-performance-smuok9?file=/src/App.js
