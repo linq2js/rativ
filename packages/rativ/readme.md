@@ -1,6 +1,9 @@
 - [`Rativ`](#rativ)
   - [Installation](#installation)
   - [Motivation](#motivation)
+  - [Recipes](#recipes)
+    - [Performance Test](#performance-test)
+  - [API reference](#api-reference)
 
 # `Rativ`
 
@@ -62,3 +65,13 @@ const MyComp = stable((props) => {
   };
 });
 ```
+
+## Recipes
+
+### Performance Test
+
+https://codesandbox.io/s/rativ-performance-smuok9?file=/src/App.js
+
+## API reference
+
+https://linq2js.github.io/rativ/

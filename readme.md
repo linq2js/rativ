@@ -1,4 +1,4 @@
-#`Rativ`
+# `Rativ`
 
 A React library for creating reactive components
 
