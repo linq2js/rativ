@@ -45,8 +45,8 @@ test("async computed signal", async () => {
 });
 
 test("wait all", async () => {
-  const a = signal(delay(10, 1));
-  const b = signal(delay(5, 2));
+  const a = signal(delay(20, 1));
+  const b = signal(delay(10, 2));
   expect(a.loading).toBe(true);
   expect(b.loading).toBe(true);
   const sum = signal(() => {
@@ -54,16 +54,16 @@ test("wait all", async () => {
     return av + bv;
   });
   expect(sum.loading).toBe(true);
-  await delay(8);
+  await delay(15);
   // b is completed but sum is still in progress
   expect(b.loading).toBe(false);
   expect(sum.loading).toBe(true);
-  await delay(8);
+  await delay(15);
   expect(sum.loading).toBe(false);
   expect(sum.state).toBe(3);
 });
 
-test("wait any", async () => {
+test("Wait any", async () => {
   const a = signal(delay(10, 1));
   const b = signal(delay(5, 2));
   expect(a.loading).toBe(true);
@@ -76,4 +76,36 @@ test("wait any", async () => {
   await delay(8);
   // b wins
   expect(sum.state).toBe("b");
+});
+
+test("reducer (sync)", () => {
+  const emittalbe = signal(0, (state, action: "inc" | "dec") => {
+    if (action === "inc") return state + 1;
+    if (action === "dec") return state - 1;
+    return state;
+  });
+  expect(emittalbe.state).toBe(0);
+  emittalbe.emit("inc");
+  expect(emittalbe.state).toBe(1);
+  emittalbe.emit("dec");
+  expect(emittalbe.state).toBe(0);
+});
+
+test("reducer (async)", async () => {
+  const step = signal(delay(10, 1));
+  const emittalbe = signal(0, (state, action: "inc" | "dec") => {
+    if (action === "inc") return state + step.get();
+    if (action === "dec") return state - step.get();
+    return state;
+  });
+  expect(emittalbe.state).toBe(0);
+  emittalbe.emit("inc");
+  expect(emittalbe.loading).toBe(true);
+  expect(emittalbe.state).toBe(0);
+  await delay(50);
+  expect(step.state).toBe(1);
+  expect(step.loading).toBe(false);
+  expect(emittalbe.state).toBe(1);
+  emittalbe.emit("dec");
+  expect(emittalbe.state).toBe(0);
 });

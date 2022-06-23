@@ -1,7 +1,8 @@
-- [Installation](#installation)
-- [Motivation](#motivation)
+- [`Rativ`](#rativ)
+  - [Installation](#installation)
+  - [Motivation](#motivation)
 
-#`Rativ`
+# `Rativ`
 
 A React library for creating reactive components
 
@@ -10,13 +11,13 @@ A React library for creating reactive components
 **with NPM**
 
 ```bash
-npm i reslot --save
+npm i rativ --save
 ```
 
 **with YARN**
 
 ```bash
-yarn add reslot
+yarn add rativ
 ```
 
 ## Motivation

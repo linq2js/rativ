@@ -59,7 +59,13 @@ export type CreateSignal = {
   ): EmittableSignal<T, A>;
 };
 
-let currentDispatcher: { withSignal(subscribe: Function): void } | undefined;
+export type Wait = {
+  <S>(signals: S): {
+    [key in keyof S]: S[key] extends Signal<infer T> ? T : never;
+  };
+};
+
+let currentWatcher: { watch(subscribe: Function): void } | undefined;
 
 const createCallbackGroup = () => {
   const callbacks = new Set<Function>();
@@ -149,9 +155,9 @@ const createSignal: CreateSignal = (
     return listeners.add(listener);
   };
 
-  const track = (subscribe: Function) => {
-    if (currentDispatcher) {
-      currentDispatcher.withSignal(subscribe);
+  const handleTracking = (subscribe: Function) => {
+    if (currentWatcher) {
+      currentWatcher.watch(subscribe);
     }
   };
 
@@ -183,11 +189,12 @@ const createSignal: CreateSignal = (
 
     // should notify state listeners if status is changed
     if (stateChanged || statusChanged) {
+      changeToken = {};
       allListeners.state.call(state);
     }
   };
   const get = () => {
-    if (currentDispatcher) {
+    if (currentWatcher) {
       if (loading) {
         throw signal.promise;
       }
@@ -195,7 +202,7 @@ const createSignal: CreateSignal = (
         throw error;
       }
     }
-    track(allListeners.state.add);
+    handleTracking(allListeners.state.add);
     return state;
   };
   const set = (nextState: (() => any) | any) => {
@@ -205,7 +212,7 @@ const createSignal: CreateSignal = (
     }
     if (state === nextState) return;
     if (isPromiseLike(nextState)) {
-      const token = (changeToken = {});
+      let token: any;
 
       signal.promise = nextState
         .then((value) => {
@@ -221,6 +228,7 @@ const createSignal: CreateSignal = (
 
       // should change status after lastPromise ready
       changeStatus(true, undefined, state);
+      token = changeToken;
 
       return;
     }
@@ -231,11 +239,11 @@ const createSignal: CreateSignal = (
   const signal = {
     promise: undefined as Promise<any> | undefined,
     get error() {
-      track(allListeners.status.add);
+      handleTracking(allListeners.status.add);
       return error;
     },
     get loading() {
-      track(allListeners.status.add);
+      handleTracking(allListeners.status.add);
       return loading;
     },
     get,
@@ -250,15 +258,15 @@ const createSignal: CreateSignal = (
 
     const computeState = state;
     state = undefined;
-    const unsubscribes = new Map<any, Function>();
+    const unsubscribes = new Map();
     const invalidateState = () => {
       try {
-        captureDependencySignals(
-          unsubscribes,
+        startWatching(
           () => {
             lastContext = createContext();
             set(computeState(lastContext));
           },
+          unsubscribes,
           invalidateState
         );
       } catch (ex) {
@@ -289,7 +297,31 @@ const createSignal: CreateSignal = (
         emit(action: any) {
           allListeners.emit.call(state, action);
           lastContext = createContext();
-          set(reducer(state, action, lastContext));
+
+          try {
+            startWatching(() => {
+              set(reducer(state, action, lastContext));
+            });
+          } catch (ex) {
+            // run reducer again dependency signals are in progress
+            if (isPromiseLike(ex)) {
+              let token: any;
+              signal.promise = ex.then(
+                () => {
+                  if (token !== changeToken) return;
+                  set(reducer(state, action, lastContext));
+                },
+                (reason) => {
+                  if (token !== changeToken) return;
+                  changeStatus(false, reason, state);
+                }
+              );
+              changeStatus(true, undefined, state);
+              token = changeToken;
+              return;
+            }
+            changeStatus(false, ex, state);
+          }
         },
         reset() {
           set(initialState);
@@ -316,27 +348,27 @@ const createSignal: CreateSignal = (
   return signal;
 };
 
-const captureDependencySignals = (
-  unsubscribes: Map<any, Function>,
+const startWatching = (
   inner: VoidFunction,
+  unsubscribes?: Map<any, Function>,
   onUpdate?: VoidFunction,
   onDone?: VoidFunction
 ) => {
-  const prevDispatcher = currentDispatcher;
-  const inactiveSignals = new Set(unsubscribes.keys());
-  currentDispatcher = {
-    withSignal(subscribe) {
-      inactiveSignals.delete(subscribe);
-      if (onUpdate && !unsubscribes.has(subscribe)) {
-        unsubscribes.set(subscribe, subscribe(onUpdate));
+  const prevWatcher = currentWatcher;
+  const inactiveSignals = new Set(unsubscribes?.keys());
+  currentWatcher = {
+    watch(channel) {
+      inactiveSignals.delete(channel);
+      if (onUpdate && !unsubscribes?.has(channel)) {
+        unsubscribes?.set(channel, channel(onUpdate));
       }
     },
   };
   try {
     return inner();
   } finally {
-    currentDispatcher = prevDispatcher;
-    inactiveSignals.forEach((x) => unsubscribes.delete(x));
+    currentWatcher = prevWatcher;
+    inactiveSignals.forEach((x) => unsubscribes?.delete(x));
     onDone?.();
   }
 };
@@ -455,9 +487,9 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
         // We use it to force inner component update whenever signal changed
         forceChildUpdate = forceUpdate;
         if (typeof result === "function") {
-          return captureDependencySignals(
-            unsubscribes,
+          return startWatching(
             result,
+            unsubscribes,
             rerender,
             updateForwardedRef
           );
@@ -493,20 +525,27 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
   ) as any;
 };
 
+export const isSignal = <T>(value: any): value is Signal<T> => {
+  return (
+    value &&
+    typeof value === "object" &&
+    typeof value.on === "function" &&
+    typeof value.get === "function"
+  );
+};
+
 /**
  * if `signals` is an array, wait() works like Promise.all() unless it works like Promise.race()
  * @param signals
  * @param autoAbort
  * @returns
  */
-export const wait = <T>(
-  signals: T,
-  autoAbort?: boolean
-): { [key in keyof T]: T[key] extends Signal<infer S> ? S : never } => {
-  return captureDependencySignals(new Map(), () => {
+export const wait: Wait = (signals, autoAbort?: boolean) => {
+  return startWatching(() => {
     const promises: Promise<any>[] = [];
     const pending: Signal[] = [];
 
+    // wait(signals[])
     if (Array.isArray(signals)) {
       const results: any[] = [];
       signals.forEach((signal: Signal, index) => {
