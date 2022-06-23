@@ -1,6 +1,6 @@
 {
   "name": "rativ",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A React library for creating reactive components",
   "author": "linq2js <linqtojs@gmail.com>",
   "repository": {
