@@ -1,0 +1,41 @@
+{
+  "name": "rativ",
+  "version": "0.0.0",
+  "description": "A React library for creating reactive components",
+  "author": "linq2js <linqtojs@gmail.com>",
+  "repository": {
+    "url": "https://github.com/linq2js/rativ"
+  },
+  "homepage": "https://linq2js.github.io/rativ/",
+  "license": "ISC",
+  "main": "dist/tsc/main.js",
+  "types": "dist/tsc/main.d.ts",
+  "directories": {
+    "lib": "lib"
+  },
+  "files": [
+    "lib",
+    "dist/tsc"
+  ],
+  "keywords": [
+    "react",
+    "stable",
+    "slot",
+    "dynamic",
+    "render",
+    "stable",
+    "reactive",
+    "signal",
+    "hook",
+    "object"
+  ],
+  "peerDependenciesMeta": {},
+  "scripts": {
+    "prepublishOnly": "yarn test && yarn && yarn build",
+    "lint": "eslint lib/ --ext .js,.jsx,.ts,.tsx",
+    "test": "jest --passWithNoTests",
+    "clean": "rm -rf dist build package",
+    "ts-node": "ts-node",
+    "build": "rimraf dist && tsc"
+  }
+}
