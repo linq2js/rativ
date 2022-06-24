@@ -1,5 +1,4 @@
-import { signal, wait } from "./main";
-import { delay } from "./util";
+import { signal, wait, delay, task } from "./main";
 
 test("simple siganl", () => {
   const a = signal(0);
@@ -108,4 +107,23 @@ test("emittable: async", async () => {
   expect(emittalbe.state).toBe(1);
   emittalbe.emit("dec");
   expect(emittalbe.state).toBe(0);
+});
+
+test("task", async () => {
+  const loadData = signal(0, () => {
+    const delayTask = task(delay);
+    delayTask(10);
+    return 1;
+  });
+  const dispatcher = signal(() => {
+    const loadDataTask = task(loadData.emit);
+    loadDataTask();
+    loadDataTask();
+    loadDataTask();
+    return loadDataTask();
+  });
+  expect(dispatcher.loading).toBe(true);
+  await delay(20);
+  expect(dispatcher.loading).toBe(false);
+  expect(dispatcher.state).toBe(1);
 });

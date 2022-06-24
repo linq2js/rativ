@@ -48,8 +48,8 @@ export type Context = {
   abort(): void;
 };
 
-export type EmittableSignal<T = any, A = any> = Signal<T> & {
-  emit(action: A, key?: any): EmittableSignal<T, A>;
+export type EmittableSignal<T = any, A = void> = Signal<T> & {
+  emit(action: A): EmittableSignal<T, A>;
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
 };
 
@@ -61,27 +61,24 @@ export type CreateSignal = {
   <T>(
     initialState: Promise<T> | T | ((context: Context) => T)
   ): UpdatableSignal<T>;
-  <T, A>(
+
+  <T, A = void>(
     initialState: T,
-    reducer: (state: T, action: A, context: Context) => T | Promise<T>,
-    options?: NoInfer<EmittableOptions<A>>
+    reducer: (state: NoInfer<T>, action: A, context: Context) => T | Promise<T>,
+    options?: EmittableOptions<A>
   ): EmittableSignal<T, A>;
 };
 
 export type Wait = {
   <T>(singal: Signal<T>): T;
-  <S>(signals: S): {
-    [key in keyof S]: S[key] extends Signal<infer T> ? T : never;
+  <S>(awaitables: S): {
+    [key in keyof S]: S[key] extends Signal<infer T>
+      ? T
+      : S[key] extends () => infer T
+      ? T
+      : never;
   };
 };
-
-let currentDispatcher:
-  | {
-      watch(subscribe: Function): void;
-      emittings?: Map<any, Set<any>>;
-      emittable: boolean;
-    }
-  | undefined;
 
 const createCallbackGroup = () => {
   const callbacks = new Set<Function>();
@@ -116,10 +113,12 @@ const isPromiseLike = <T>(value: any): value is Promise<T> => {
 
 const isAbortControllerSupported = typeof AbortController !== "undefined";
 
-const createContext = (): Context => {
+const createContext = (): InternalContext => {
   let ac: AbortController | undefined;
   let aborted = false;
   return {
+    taskIndex: 0,
+    taskList: [],
     get aborted() {
       return aborted;
     },
@@ -137,29 +136,34 @@ const createContext = (): Context => {
   };
 };
 
-const canEmit = (context: any, key: any) => {
-  if (!currentDispatcher) return false;
+export type InternalContext = Context & {
+  taskIndex: number;
+  taskList: Function[];
+};
 
-  let allEmittings = currentDispatcher.emittings;
+export type Scope = {
+  registerDependant?: (childChannel: Function) => void;
+  context?: InternalContext;
+  onDone?: VoidFunction;
+};
 
-  if (!allEmittings) {
-    allEmittings = new Map();
-    currentDispatcher.emittings = allEmittings;
+export type Task<T, A extends any[]> = (...args: A) => T & {
+  readonly aborted: boolean;
+  abort(): void;
+  runner(...args: A): () => T;
+};
+
+let currentScope: Scope | undefined;
+
+const scopeOfWork = (fn: (scope: Scope) => any, scope?: Scope): any => {
+  const prevScope = currentScope;
+  try {
+    currentScope = { ...currentScope, ...scope };
+    return fn(currentScope);
+  } finally {
+    currentScope = prevScope;
+    scope?.onDone?.();
   }
-
-  const emittedActionKeys = allEmittings.get(context);
-
-  // already emitted
-  if (emittedActionKeys?.has(key)) {
-    return false;
-  }
-
-  if (!emittedActionKeys) {
-    allEmittings.set(context, new Set([key]));
-  } else {
-    emittedActionKeys.add(key);
-  }
-  return true;
 };
 
 const createSignal: CreateSignal = (
@@ -204,8 +208,8 @@ const createSignal: CreateSignal = (
   };
 
   const handleTracking = (subscribe: Function) => {
-    if (currentDispatcher) {
-      currentDispatcher.watch(subscribe);
+    if (currentScope?.registerDependant) {
+      currentScope.registerDependant(subscribe);
     }
   };
 
@@ -246,7 +250,7 @@ const createSignal: CreateSignal = (
   };
 
   const get = () => {
-    if (currentDispatcher) {
+    if (currentScope?.registerDependant || currentScope?.context) {
       if (loading) {
         throw signal.task;
       }
@@ -311,26 +315,33 @@ const createSignal: CreateSignal = (
 
     const computeState = state;
     state = undefined;
-    const unsubscribes = new Map();
+    const dependants = new Map();
     const invalidateState = () => {
-      try {
-        startWatching(
-          false,
-          () => {
-            lastContext = createContext();
-            set(computeState(lastContext));
-          },
-          unsubscribes,
-          invalidateState
-        );
-      } catch (ex) {
-        if (isPromiseLike(ex)) {
-          changeStatus(true, undefined, state);
-          ex.finally(invalidateState);
-          return;
+      const context = createContext();
+      const execute = () => {
+        lastContext = context;
+        try {
+          collectDependencies(
+            () => {
+              context.taskIndex = 0;
+              set(computeState(context));
+            },
+            dependants,
+            // invalidate state when dependency signals are changed
+            invalidateState,
+            { context }
+          );
+        } catch (ex) {
+          if (isPromiseLike(ex)) {
+            changeStatus(true, undefined, state);
+            ex.finally(execute);
+            return;
+          }
+          changeStatus(false, ex, state);
         }
-        changeStatus(false, ex, state);
-      }
+      };
+
+      execute();
     };
 
     Object.assign(signal, {
@@ -348,53 +359,46 @@ const createSignal: CreateSignal = (
       // is emittable signal, it has only state getter, and emit method
       Object.defineProperty(signal, "state", { get });
       const emittableSignal = {
-        emit(action: any, key?: any) {
-          const hasKey = arguments.length > 1;
-          if (currentDispatcher) {
-            const actionKey = hasKey
-              ? key
-              : action && typeof action === "object"
-              ? action.type ?? action.key ?? action.id
-              : action;
-
-            if (typeof actionKey === "undefined") {
-              throw new Error(
-                "Can not dispatch non-keyed action inside another signal. The action must be primitive or have a type/key/id property. Rativ needs an action key to avoid emitting action multiple times at once"
-              );
-            }
-
-            if (!canEmit(signal, actionKey)) {
-              return signal;
-            }
-          }
+        emit(action: any) {
           allListeners.emit.call(state, action);
-          lastContext = createContext();
+          const context = (lastContext = createContext());
 
-          try {
-            startWatching(true, () => {
-              set(reducer(state, action, lastContext));
-            });
-          } catch (ex) {
-            // run reducer again dependency signals are in progress
-            if (isPromiseLike(ex)) {
-              let token: any;
-              signal.task = ex.then(
+          const emitInternal = () => {
+            try {
+              scopeOfWork(
                 () => {
-                  if (token !== changeToken) return;
-                  set(reducer(state, action, lastContext));
+                  context.taskIndex = 0;
+                  const nextState = reducer(state, action, context);
+                  set(nextState);
                 },
-                (reason) => {
-                  if (token !== changeToken) return;
-                  changeStatus(false, reason, state);
-                }
+                { context }
               );
-              changeStatus(true, undefined, state);
-              token = changeToken;
-              return signal;
+            } catch (ex) {
+              // run reducer again dependency signals are in progress
+              if (isPromiseLike(ex)) {
+                let token: any;
+                signal.task = ex.then(
+                  () => {
+                    if (token !== changeToken) return;
+                    emitInternal();
+                  },
+                  (reason) => {
+                    if (token !== changeToken) return;
+                    changeStatus(false, reason, state);
+                  }
+                );
+                changeStatus(true, undefined, state);
+                token = changeToken;
+                return signal;
+              }
+              console.log(ex);
+              changeStatus(false, ex, state);
             }
-            changeStatus(false, ex, state);
-          }
-          return signal;
+
+            return signal;
+          };
+
+          return emitInternal();
         },
         reset() {
           set(initialState);
@@ -425,31 +429,27 @@ const createSignal: CreateSignal = (
   return signal;
 };
 
-const startWatching = (
-  emittable: boolean,
-  inner: VoidFunction,
-  unsubscribes?: Map<any, Function>,
+const collectDependencies = <T>(
+  fn: () => T,
+  dependants?: Map<any, any>,
   onUpdate?: VoidFunction,
-  onDone?: VoidFunction
+  scope?: Scope
 ) => {
-  const prevWatcher = currentDispatcher;
-  const inactiveSignals = new Set(unsubscribes?.keys());
-  currentDispatcher = {
-    emittable,
-    watch(channel) {
-      inactiveSignals.delete(channel);
-      if (onUpdate && !unsubscribes?.has(channel)) {
-        unsubscribes?.set(channel, channel(onUpdate));
+  const inactiveDependants = new Set(dependants?.keys());
+
+  return scopeOfWork(fn, {
+    ...scope,
+    registerDependant(dependant) {
+      inactiveDependants.delete(dependant);
+      if (onUpdate && !dependants?.has(dependant)) {
+        dependants?.set(dependant, dependant(onUpdate));
       }
     },
-  };
-  try {
-    return inner();
-  } finally {
-    currentDispatcher = prevWatcher;
-    inactiveSignals.forEach((x) => unsubscribes?.delete(x));
-    onDone?.();
-  }
+    onDone() {
+      inactiveDependants.forEach((x) => dependants?.delete(x));
+      scope?.onDone?.();
+    },
+  });
 };
 
 const createStableFunction = (getCurrent: () => Function, proxy: any) => {
@@ -484,7 +484,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
     constructor(props: PropsWithRef) {
       super(props);
       const me = this;
-      const unsubscribes = new Map<any, Function>();
+      const dependants = new Map<any, Function>();
       const refCache = new Map<any, RefObject<any>>();
       const propCache = new Map<any, any>();
 
@@ -566,13 +566,9 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
         // We use it to force inner component update whenever signal changed
         forceChildUpdate = forceUpdate;
         if (typeof result === "function") {
-          return startWatching(
-            false,
-            result,
-            unsubscribes,
-            rerender,
-            updateForwardedRef
-          );
+          return collectDependencies(result, dependants, rerender, {
+            onDone: updateForwardedRef,
+          });
         }
 
         updateForwardedRef();
@@ -580,8 +576,8 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       };
 
       this._unmount = () => {
-        unsubscribes.forEach((x) => x());
-        unsubscribes.clear();
+        dependants.forEach((x) => x());
+        dependants.clear();
       };
     }
 
@@ -616,33 +612,52 @@ export const isSignal = <T>(value: any): value is Signal<T> => {
 
 /**
  * if `signals` is an array, wait() works like Promise.all() unless it works like Promise.race()
- * @param signals
+ * @param awaitables
  * @param autoAbort
  * @returns
  */
-export const wait: Wait = (signals, autoAbort?: boolean) => {
-  if (isSignal(signals)) {
-    if (signals.task) throw signals.task;
-    if (signals.error) throw signals.error;
-    return signals.state;
+export const wait: Wait = (awaitables, autoAbort?: boolean) => {
+  if (!currentScope) {
+    throw new Error("Cannot use wait() helper outside signal");
   }
-  return startWatching(false, () => {
+
+  if (isSignal(awaitables)) {
+    if (awaitables.task) throw awaitables.task;
+    if (awaitables.error) throw awaitables.error;
+    return awaitables.state;
+  }
+
+  return collectDependencies(() => {
     const promises: Promise<any>[] = [];
     const pending: Signal[] = [];
 
-    // wait(signals[])
-    if (Array.isArray(signals)) {
+    // wait(awaitables[])
+    if (Array.isArray(awaitables)) {
       const results: any[] = [];
-      signals.forEach((signal: Signal, index) => {
-        if (signal.error) {
-          throw signal.error;
-        }
+      awaitables.forEach((awaitable, index) => {
+        if (isSignal(awaitable)) {
+          if (awaitable.error) {
+            throw awaitable.error;
+          }
 
-        if (signal.task) {
-          promises.push(signal.task);
-          pending.push(signal);
-        } else {
-          results[index] = signal.state;
+          if (awaitable.task) {
+            promises.push(awaitable.task);
+            pending.push(awaitable);
+          } else {
+            results[index] = awaitable.state;
+          }
+        }
+        // is runner
+        else if (typeof awaitable === "function") {
+          try {
+            const result = awaitable();
+            results[index] = result;
+          } catch (ex) {
+            if (isPromiseLike(ex)) {
+              promises.push(ex);
+            }
+            throw ex;
+          }
         }
       });
       if (promises.length)
@@ -653,26 +668,160 @@ export const wait: Wait = (signals, autoAbort?: boolean) => {
     }
     const results: Record<string, any> = {};
     let hasResult = false;
-    Object.entries(signals).some(([key, signal]: [string, Signal]) => {
-      if (signal.error) {
-        throw signal.error;
-      }
+    Object.entries(awaitables).some(([key, awaitable]: [string, any]) => {
+      if (isSignal(awaitable)) {
+        if (awaitable.error) {
+          throw awaitable.error;
+        }
 
-      if (signal.task) {
-        promises.push(signal.task);
-        pending.push(signal);
-        return false;
+        if (awaitable.task) {
+          promises.push(awaitable.task);
+          pending.push(awaitable);
+          return false;
+        }
+        results[key] = awaitable.state;
+        hasResult = true;
       }
-      results[key] = signal.state;
-      hasResult = true;
+      // is runner
+      else if (typeof awaitable === "function") {
+        try {
+          const result = awaitable();
+          results[key] = result;
+          hasResult = true;
+        } catch (ex) {
+          if (isPromiseLike(ex)) {
+            promises.push(ex);
+            pending.push(awaitable);
+            return false;
+          }
+          throw ex;
+        }
+      }
       return true;
     });
     if (!hasResult && promises.length)
       throw Promise.race(promises).finally(
-        () => autoAbort && pending.forEach((signal) => signal.abort())
+        () => autoAbort && pending.forEach((signal) => signal.abort?.())
       );
     return results;
   }) as any;
+};
+
+/**
+ * create a task that runs once
+ * @param fn
+ * @param waitNone
+ * @returns
+ */
+export const task = <T, A extends any[]>(
+  fn: (...args: A) => T | Promise<T>,
+  waitNone?: boolean
+): Task<T, A> => {
+  return scopeOfWork(({ context }) => {
+    if (!context) {
+      throw new Error("task() helper cannot be called outside signal");
+    }
+
+    let task = context.taskList[context.taskIndex];
+    if (!task) {
+      let status: "idle" | "error" | "loading" | "success" = "idle";
+      let data: any;
+      let aborted = false;
+
+      const abort = () => {
+        if (aborted) return;
+        aborted = true;
+      };
+
+      task = Object.assign(
+        (...args: A): T => {
+          if (status === "success") {
+            return data;
+          }
+
+          if (status === "error" || status === "loading") {
+            throw data;
+          }
+
+          return scopeOfWork(
+            () => {
+              try {
+                const result = fn(...args);
+                if (isPromiseLike(result) || isSignal(result)) {
+                  throw result;
+                }
+                data = result;
+                status = "success";
+                return result;
+              } catch (ex) {
+                if (isSignal(ex)) {
+                  const signal = ex;
+                  if (!signal.task) {
+                    if (!signal.error) {
+                      return signal.state;
+                    }
+                    ex = signal.error;
+                  } else {
+                    ex = new Promise((resolve, reject) => {
+                      signal.task?.finally(() => {
+                        if (signal.error) {
+                          reject(signal.error);
+                        } else {
+                          resolve(signal.state);
+                        }
+                      });
+                    });
+                  }
+                }
+
+                if (isPromiseLike(ex)) {
+                  status = "loading";
+                  const promise = ex;
+                  ex = new Promise((resolve, reject) => {
+                    promise.then(
+                      (value) => {
+                        if (context.aborted || aborted) return;
+                        status = "success";
+                        data = value;
+                        resolve(value);
+                      },
+                      (reason) => {
+                        if (context.aborted || aborted) return;
+                        status = "error";
+                        data = reason;
+                        reject(reason);
+                      }
+                    );
+                  });
+                } else {
+                  status = "error";
+                }
+
+                if (status === "loading" && waitNone) {
+                  status = "success";
+                  data = undefined;
+                  return;
+                }
+                data = ex;
+                throw ex;
+              }
+            }, // disable dependent registration
+            { registerDependant: undefined }
+          );
+        },
+        {
+          runner(...args: A) {
+            return Object.assign(() => task(...args), { abort });
+          },
+          abort,
+        }
+      );
+      Object.defineProperty(task, "aborted", { get: () => aborted });
+      context.taskList[context.taskIndex] = task;
+      context.taskIndex++;
+    }
+    return task;
+  });
 };
 
 export const delay = <T = void>(ms: number, resolved?: T) =>
