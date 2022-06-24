@@ -78,7 +78,7 @@ test("Wait any", async () => {
   expect(sum.state).toBe("b");
 });
 
-test("reducer (sync)", () => {
+test("emittable: sync", () => {
   const emittalbe = signal(0, (state, action: "inc" | "dec") => {
     if (action === "inc") return state + 1;
     if (action === "dec") return state - 1;
@@ -91,7 +91,7 @@ test("reducer (sync)", () => {
   expect(emittalbe.state).toBe(0);
 });
 
-test("reducer (async)", async () => {
+test("emittable: async", async () => {
   const step = signal(delay(10, 1));
   const emittalbe = signal(0, (state, action: "inc" | "dec") => {
     if (action === "inc") return state + step.get();

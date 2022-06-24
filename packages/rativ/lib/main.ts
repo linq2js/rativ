@@ -25,7 +25,7 @@ export type Refs<T extends Record<string, any> = {}, F = any> = {
 export type Signal<T = any> = {
   readonly loading: boolean;
   readonly error: any;
-  readonly promise: Promise<T> | undefined;
+  readonly task: Promise<T> | undefined;
   on(listener: Listener<T>): VoidFunction;
   on(type: "error", listener: Listener<void>): VoidFunction;
   on(type: "loading", listener: Listener<void>): VoidFunction;
@@ -42,11 +42,19 @@ export type UpdatableSignal<T = any> = Signal<T> & {
   ): void;
 };
 
-export type Context = { signal: any; abort(): void };
+export type Context = {
+  readonly signal: AbortController["signal"] | undefined;
+  readonly aborted: boolean;
+  abort(): void;
+};
 
 export type EmittableSignal<T = any, A = any> = Signal<T> & {
-  emit(action: A): void;
+  emit(action: A, key?: any): EmittableSignal<T, A>;
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
+};
+
+export type EmittableOptions<A = any> = {
+  initAction?: A;
 };
 
 export type CreateSignal = {
@@ -55,17 +63,25 @@ export type CreateSignal = {
   ): UpdatableSignal<T>;
   <T, A>(
     initialState: T,
-    reducer: (state: T, action: A, context: Context) => T | Promise<T>
+    reducer: (state: T, action: A, context: Context) => T | Promise<T>,
+    options?: NoInfer<EmittableOptions<A>>
   ): EmittableSignal<T, A>;
 };
 
 export type Wait = {
+  <T>(singal: Signal<T>): T;
   <S>(signals: S): {
     [key in keyof S]: S[key] extends Signal<infer T> ? T : never;
   };
 };
 
-let currentWatcher: { watch(subscribe: Function): void } | undefined;
+let currentDispatcher:
+  | {
+      watch(subscribe: Function): void;
+      emittings?: Map<any, Set<any>>;
+      emittable: boolean;
+    }
+  | undefined;
 
 const createCallbackGroup = () => {
   const callbacks = new Set<Function>();
@@ -102,7 +118,11 @@ const isAbortControllerSupported = typeof AbortController !== "undefined";
 
 const createContext = (): Context => {
   let ac: AbortController | undefined;
+  let aborted = false;
   return {
+    get aborted() {
+      return aborted;
+    },
     get signal() {
       if (isAbortControllerSupported && !ac) {
         ac = new AbortController();
@@ -110,14 +130,42 @@ const createContext = (): Context => {
       return ac?.signal;
     },
     abort() {
+      if (aborted) return;
+      aborted = true;
       ac?.abort();
     },
   };
 };
 
+const canEmit = (context: any, key: any) => {
+  if (!currentDispatcher) return false;
+
+  let allEmittings = currentDispatcher.emittings;
+
+  if (!allEmittings) {
+    allEmittings = new Map();
+    currentDispatcher.emittings = allEmittings;
+  }
+
+  const emittedActionKeys = allEmittings.get(context);
+
+  // already emitted
+  if (emittedActionKeys?.has(key)) {
+    return false;
+  }
+
+  if (!emittedActionKeys) {
+    allEmittings.set(context, new Set([key]));
+  } else {
+    emittedActionKeys.add(key);
+  }
+  return true;
+};
+
 const createSignal: CreateSignal = (
   initialState: unknown,
-  reducer?: Function
+  reducer?: Function,
+  options?: EmittableOptions
 ): any => {
   const allListeners = {
     emit: createCallbackGroup(),
@@ -156,15 +204,15 @@ const createSignal: CreateSignal = (
   };
 
   const handleTracking = (subscribe: Function) => {
-    if (currentWatcher) {
-      currentWatcher.watch(subscribe);
+    if (currentDispatcher) {
+      currentDispatcher.watch(subscribe);
     }
   };
 
   const abort = () => {
     lastContext?.abort();
     lastContext = undefined;
-    signal.promise = undefined;
+    signal.task = undefined;
   };
 
   const changeStatus = (
@@ -174,15 +222,18 @@ const createSignal: CreateSignal = (
   ) => {
     let statusChanged = false;
     let stateChanged = false;
+
     if (nextLoading !== loading || nextError !== error) {
       loading = nextLoading;
       error = nextError;
       statusChanged = true;
     }
+
     if (nextState !== state) {
       state = nextState;
       stateChanged = true;
     }
+
     if (statusChanged) {
       allListeners.status.call(error);
     }
@@ -193,10 +244,11 @@ const createSignal: CreateSignal = (
       allListeners.state.call(state);
     }
   };
+
   const get = () => {
-    if (currentWatcher) {
+    if (currentDispatcher) {
       if (loading) {
-        throw signal.promise;
+        throw signal.task;
       }
       if (error) {
         throw error;
@@ -205,6 +257,7 @@ const createSignal: CreateSignal = (
     handleTracking(allListeners.state.add);
     return state;
   };
+
   const set = (nextState: (() => any) | any) => {
     if (typeof nextState === "function") {
       lastContext = createContext();
@@ -214,15 +267,15 @@ const createSignal: CreateSignal = (
     if (isPromiseLike(nextState)) {
       let token: any;
 
-      signal.promise = nextState
+      signal.task = nextState
         .then((value) => {
           if (changeToken !== token) return;
-          signal.promise = undefined;
+          signal.task = undefined;
           changeStatus(false, undefined, value);
         })
         .catch((error) => {
           if (changeToken !== token) return;
-          signal.promise = undefined;
+          signal.task = undefined;
           changeStatus(false, error, state);
         });
 
@@ -232,12 +285,12 @@ const createSignal: CreateSignal = (
 
       return;
     }
-    signal.promise = undefined;
+    signal.task = undefined;
     changeStatus(false, undefined, nextState);
   };
 
   const signal = {
-    promise: undefined as Promise<any> | undefined,
+    task: undefined as Promise<any> | undefined,
     get error() {
       handleTracking(allListeners.status.add);
       return error;
@@ -262,6 +315,7 @@ const createSignal: CreateSignal = (
     const invalidateState = () => {
       try {
         startWatching(
+          false,
           () => {
             lastContext = createContext();
             set(computeState(lastContext));
@@ -293,20 +347,38 @@ const createSignal: CreateSignal = (
     if (reducer) {
       // is emittable signal, it has only state getter, and emit method
       Object.defineProperty(signal, "state", { get });
-      Object.assign(signal, {
-        emit(action: any) {
+      const emittableSignal = {
+        emit(action: any, key?: any) {
+          const hasKey = arguments.length > 1;
+          if (currentDispatcher) {
+            const actionKey = hasKey
+              ? key
+              : action && typeof action === "object"
+              ? action.type ?? action.key ?? action.id
+              : action;
+
+            if (typeof actionKey === "undefined") {
+              throw new Error(
+                "Can not dispatch non-keyed action inside another signal. The action must be primitive or have a type/key/id property. Rativ needs an action key to avoid emitting action multiple times at once"
+              );
+            }
+
+            if (!canEmit(signal, actionKey)) {
+              return signal;
+            }
+          }
           allListeners.emit.call(state, action);
           lastContext = createContext();
 
           try {
-            startWatching(() => {
+            startWatching(true, () => {
               set(reducer(state, action, lastContext));
             });
           } catch (ex) {
             // run reducer again dependency signals are in progress
             if (isPromiseLike(ex)) {
               let token: any;
-              signal.promise = ex.then(
+              signal.task = ex.then(
                 () => {
                   if (token !== changeToken) return;
                   set(reducer(state, action, lastContext));
@@ -318,15 +390,20 @@ const createSignal: CreateSignal = (
               );
               changeStatus(true, undefined, state);
               token = changeToken;
-              return;
+              return signal;
             }
             changeStatus(false, ex, state);
           }
+          return signal;
         },
         reset() {
           set(initialState);
         },
-      });
+      };
+      Object.assign(signal, emittableSignal);
+      if (options?.initAction) {
+        emittableSignal.emit(options.initAction);
+      }
     } else {
       // is normal signal, it has state getter/setter
       Object.defineProperty(signal, "state", { get, set });
@@ -349,14 +426,16 @@ const createSignal: CreateSignal = (
 };
 
 const startWatching = (
+  emittable: boolean,
   inner: VoidFunction,
   unsubscribes?: Map<any, Function>,
   onUpdate?: VoidFunction,
   onDone?: VoidFunction
 ) => {
-  const prevWatcher = currentWatcher;
+  const prevWatcher = currentDispatcher;
   const inactiveSignals = new Set(unsubscribes?.keys());
-  currentWatcher = {
+  currentDispatcher = {
+    emittable,
     watch(channel) {
       inactiveSignals.delete(channel);
       if (onUpdate && !unsubscribes?.has(channel)) {
@@ -367,7 +446,7 @@ const startWatching = (
   try {
     return inner();
   } finally {
-    currentWatcher = prevWatcher;
+    currentDispatcher = prevWatcher;
     inactiveSignals.forEach((x) => unsubscribes?.delete(x));
     onDone?.();
   }
@@ -488,6 +567,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
         forceChildUpdate = forceUpdate;
         if (typeof result === "function") {
           return startWatching(
+            false,
             result,
             unsubscribes,
             rerender,
@@ -541,7 +621,12 @@ export const isSignal = <T>(value: any): value is Signal<T> => {
  * @returns
  */
 export const wait: Wait = (signals, autoAbort?: boolean) => {
-  return startWatching(() => {
+  if (isSignal(signals)) {
+    if (signals.task) throw signals.task;
+    if (signals.error) throw signals.error;
+    return signals.state;
+  }
+  return startWatching(false, () => {
     const promises: Promise<any>[] = [];
     const pending: Signal[] = [];
 
@@ -553,8 +638,8 @@ export const wait: Wait = (signals, autoAbort?: boolean) => {
           throw signal.error;
         }
 
-        if (signal.promise) {
-          promises.push(signal.promise);
+        if (signal.task) {
+          promises.push(signal.task);
           pending.push(signal);
         } else {
           results[index] = signal.state;
@@ -573,8 +658,8 @@ export const wait: Wait = (signals, autoAbort?: boolean) => {
         throw signal.error;
       }
 
-      if (signal.promise) {
-        promises.push(signal.promise);
+      if (signal.task) {
+        promises.push(signal.task);
         pending.push(signal);
         return false;
       }
@@ -589,5 +674,8 @@ export const wait: Wait = (signals, autoAbort?: boolean) => {
     return results;
   }) as any;
 };
+
+export const delay = <T = void>(ms: number, resolved?: T) =>
+  new Promise<T>((resolve) => setTimeout(resolve, ms, resolved));
 
 export { createSignal as signal, createStableComponent as stable };
