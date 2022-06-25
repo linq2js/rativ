@@ -1,6 +1,7 @@
 - [`Rativ`](#rativ)
   - [Installation](#installation)
   - [Motivation](#motivation)
+  - [Concepts](#concepts)
   - [Recipes](#recipes)
     - [Every callbacks are stable](#every-callbacks-are-stable)
     - [Amazing signals](#amazing-signals)
@@ -29,7 +30,11 @@ yarn add rativ
 
 ## Motivation
 
-This library is inspired by SolidJS. A component is divided into 2 parts: Stable and Unstable. Stable part contains the declarations that are fixed since initialization phase, they runs once only, Unstable part contains the changes that are re-rendered continuously by changes of the component itself or its parent. Stable part cannot contains any React hook but Unstable part can
+This library is inspired by SolidJS. Rativ aims to optimize React app in the best way, so it provides many ways to achieve that goal.
+
+## Concepts
+
+A stable component is divided into 2 parts: Stable and Unstable parts. Stable part contains the declarations that are fixed since initialization phase, they runs once only, Unstable part contains the changes that are re-rendered continuously by changes of the component itself or its parent. Stable part cannot contains any React hook but Unstable part can
 
 ```js
 import { stable } from "rativ";
