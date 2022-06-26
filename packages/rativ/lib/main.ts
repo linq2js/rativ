@@ -18,6 +18,10 @@ export type NoInfer<T> = [T][T extends any ? 0 : never];
 
 export type Listener<T, A = void> = (e: T, a: A) => void;
 
+export type Mutation<T, R = T> = (prev: T) => R;
+
+export type Nullable<T> = T | undefined | null;
+
 export type Refs<T extends Record<string, any> = {}, F = any> = {
   [key in keyof T]?: T[key];
 } & { [key in `${keyof T & string}Ref`]: RefObject<any> } & {
@@ -42,6 +46,7 @@ export type UpdatableSignal<T = any> = Signal<T> & {
   set(
     value: ((prev: T, context: Context) => T | Promise<T>) | T | Promise<T>
   ): void;
+  mutate(...mutation: Mutation<T>[]): UpdatableSignal<T>;
 };
 
 export type Context = {
@@ -184,6 +189,12 @@ export type Task<T, A extends any[]> = (...args: A) => T & {
   readonly aborted: boolean;
   abort(): void;
   runner(...args: A): () => T;
+};
+
+export type WatchOptions<T> = {
+  defer?: boolean;
+  callback?: (value: T) => void;
+  compare?: (a: T, b: T) => boolean;
 };
 
 let currentScope: Scope | undefined;
@@ -337,6 +348,11 @@ const createSignal: CreateSignal = (
     changeStatus(false, undefined, nextState);
   };
 
+  const mutate = (...mutations: Mutation<any>[]) => {
+    set(mutations.reduce((prev, mutation) => mutation(prev), state));
+    return signal;
+  };
+
   const signal = {
     task: undefined as Promise<any> | undefined,
     get error() {
@@ -350,6 +366,9 @@ const createSignal: CreateSignal = (
     get,
     on,
     abort,
+    toJSON() {
+      return state;
+    },
   };
 
   // computed signal
@@ -390,6 +409,7 @@ const createSignal: CreateSignal = (
 
     Object.assign(signal, {
       set,
+      mutate,
       reset() {
         state = undefined;
         invalidateState();
@@ -453,10 +473,11 @@ const createSignal: CreateSignal = (
         emittableSignal.emit(options.initAction);
       }
     } else {
-      // is normal signal, it has state getter/setter
+      // is updatable signal, it has state getter/setter
       Object.defineProperty(signal, "state", { get, set });
       Object.assign(signal, {
         set,
+        mutate,
         reset() {
           set(initialState);
         },
@@ -606,7 +627,14 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
 
   // wrap render function to functional component to get advantages of hooks
   const Inner = memo((props: { __render: (forceUpdate: Function) => any }) => {
-    const forceUpdate = useState()[1];
+    const setState = useState()[1];
+    // we use nextRender value to prevent calling forceUpdate multiple times
+    // nextRender value will be changed only when the component is actual re-rendered
+    const nextRenderRef = useRef<any>();
+    const forceUpdate = useState(
+      () => () => setState(nextRenderRef.current)
+    )[0];
+    nextRenderRef.current = {};
     return props.__render(forceUpdate);
   });
 
@@ -650,7 +678,9 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
 
       let forceChildUpdate: Function;
 
-      const rerender = () => forceChildUpdate({});
+      const rerender = () => {
+        forceChildUpdate();
+      };
 
       /**
        * update forwardedRef
@@ -943,6 +973,7 @@ export const SlotInner = memo((props: { render: () => any }) => {
     dependants: new Map(),
     rerender: () => rerender({}),
   }))[0];
+
   return collectDependencies(
     props.render,
     context.dependants,
@@ -951,13 +982,23 @@ export const SlotInner = memo((props: { render: () => any }) => {
   );
 });
 
-export const SlotWrapper: FC<{ render: () => any }> = (props) => {
-  const renderRef = useRef(props.render);
+export const SlotWrapper: FC<{ slot: any }> = (props) => {
+  const slotRef = useRef(props.slot);
+  const tokenRef = useRef({});
   const render = useState(() =>
-    createStableFunction(() => renderRef.current)
+    createStableFunction(() =>
+      typeof slotRef.current === "function"
+        ? slotRef.current
+        : slotRef.current.get
+    )
   )[0];
-  renderRef.current = props.render;
-  return createElement(SlotInner, { render });
+  slotRef.current = props.slot;
+
+  // change token if the slot is function, this makes SlotInner re-render to update latest result of render function
+  if (typeof props.slot === "function") {
+    tokenRef.current = {};
+  }
+  return createElement(SlotInner, { render, token: tokenRef.current });
 };
 
 /**
@@ -965,12 +1006,8 @@ export const SlotWrapper: FC<{ render: () => any }> = (props) => {
  * @param input
  * @returns
  */
-export const slot: CreateSlot = (input): any => {
-  if (typeof input === "function") {
-    return createElement(SlotWrapper, { render: input });
-  }
-  const signal = input;
-  return createElement(SlotWrapper, { render: () => signal.get() });
+export const slot: CreateSlot = (slot): any => {
+  return createElement(SlotWrapper, { slot });
 };
 
 /**
@@ -1015,3 +1052,46 @@ export const delay = <T = void>(ms: number, resolved?: T) =>
   new Promise<T>((resolve) => setTimeout(resolve, ms, resolved));
 
 export { createSignal as signal, createStableComponent as stable };
+
+/**
+ * start watching signal changes
+ * @param watchFn
+ * @param callback
+ * @returns
+ */
+export const watch = <T>(
+  watchFn: () => T,
+  { callback, compare }: NoInfer<WatchOptions<T>> = {}
+) => {
+  let dependants = new Map<any, Function>();
+  let firstTime = true;
+  let active = true;
+  let prevValue: T;
+
+  const startWatching = () => {
+    if (!active) return;
+    const value = collectDependencies(watchFn, dependants, startWatching, {
+      type: "task",
+      addDependant: undefined,
+    });
+
+    if (firstTime) {
+      firstTime = false;
+      prevValue = value;
+      return;
+    }
+
+    if (compare && compare(prevValue, value)) return;
+
+    prevValue = value;
+
+    callback?.(value);
+  };
+
+  startWatching();
+
+  return () => {
+    active = false;
+    dependants.forEach((x) => x());
+  };
+};

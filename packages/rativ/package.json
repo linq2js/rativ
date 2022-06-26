@@ -11,10 +11,12 @@
   "main": "dist/tsc/main.js",
   "types": "dist/tsc/main.d.ts",
   "directories": {
-    "lib": "lib"
+    "lib": "lib",
+    "mutation": "mutation"
   },
   "files": [
     "lib",
+    "mutation",
     "dist/tsc"
   ],
   "keywords": [

@@ -145,6 +145,7 @@ const Counter = stable(() => {
   return () => {
     // receive data from global signal
     const theme = themeSignal.get();
+
     const style =
       theme === "dark"
         ? { backgroundColor: "black", color: "white" }

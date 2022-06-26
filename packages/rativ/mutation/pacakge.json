@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/mutation/index.js",
+  "types": "../dist/tsc/mutation/index.d.ts"
+}

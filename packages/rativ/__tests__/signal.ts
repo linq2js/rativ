@@ -127,3 +127,10 @@ test("task", async () => {
   expect(computed.loading).toBe(false);
   expect(computed.state).toBe(1);
 });
+
+test("toJSON", () => {
+  expect(JSON.stringify(signal(1))).toBe("1");
+  expect(JSON.stringify(signal({ a: 1, b: 2 }))).toBe(
+    JSON.stringify({ a: 1, b: 2 })
+  );
+});
