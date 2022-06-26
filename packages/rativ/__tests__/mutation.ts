@@ -1,5 +1,16 @@
 import { signal } from "../lib/main";
-import { include, exclude, nonNull, prop, push } from "../lib/mutation";
+import {
+  include,
+  exclude,
+  nonNull,
+  prop,
+  push,
+  splice,
+  insert,
+  slice,
+  sort,
+  move,
+} from "../lib/mutation";
 
 test("push with optional prop", () => {
   const data = signal({
@@ -99,4 +110,50 @@ test("exclude: predicate with limit", () => {
   const data = signal([1, 2, 3, 4, 5]);
   data.mutate(exclude((x) => x % 2 === 0, 1));
   expect(data.state).toEqual([1, 3, 4, 5]);
+});
+
+test("splice", () => {
+  const data = signal([1, 2, 3, 4, 5]);
+  data.mutate(splice(0, 2, [6, 7]));
+  expect(data.state).toEqual([6, 7, 3, 4, 5]);
+});
+
+test("insert", () => {
+  const data = signal([1, 2, 3, 4, 5]);
+  data.mutate(insert(0, [6, 7]));
+  expect(data.state).toEqual([6, 7, 1, 2, 3, 4, 5]);
+});
+
+test("slice", () => {
+  const data = signal([1, 2, 3, 4, 5]);
+  data.mutate(slice(0, 2));
+  expect(data.state).toEqual([1, 2]);
+});
+
+test("sort: without field selector", () => {
+  const data = signal([5, 4, 2, 1, 6, 3]);
+  data.mutate(sort());
+  expect(data.state).toEqual([1, 2, 3, 4, 5, 6]);
+});
+
+test("sort", () => {
+  const data = signal([
+    { name: "A", age: 1 },
+    { name: "A", age: 2 },
+    { name: "B", age: 1 },
+  ]);
+  data.mutate(sort((b) => b.desc((x) => x.name).asc((x) => x.age)));
+  expect(data.state).toEqual([
+    { name: "B", age: 1 },
+    { name: "A", age: 1 },
+    { name: "A", age: 2 },
+  ]);
+});
+
+test("move", () => {
+  const data = signal([1, 2, 3, 4, 5, 6]);
+  data.mutate(move(3, (x) => x % 2 === 0));
+  expect(data.state).toEqual([1, 3, 2, 4, 6, 5]);
+  data.mutate(move(0, [4, 5]));
+  expect(data.state).toEqual([6, 5, 1, 3, 2, 4]);
 });

@@ -27,3 +27,34 @@ export const prop = <T, P extends keyof T>(
     return { ...prev, [name]: next };
   };
 };
+
+export const swap =
+  <T, P extends keyof T>(from: P, to: P): Mutation<T> =>
+  (prev) => {
+    if (!prev) return prev;
+    const a = prev[from];
+    const b = prev[to];
+    if (a === b) return prev;
+    const next = Array.isArray(prev)
+      ? (prev.slice() as unknown as T)
+      : ({ ...prev } as T);
+    next[to] = a;
+    next[from] = b;
+    return next;
+  };
+
+export const unset =
+  <T, P extends keyof T>(...props: P[]): Mutation<T> =>
+  (prev) => {
+    if (!prev) return prev;
+    let next: any = prev;
+    props.forEach((prop) => {
+      if (prop in next) {
+        if (next === prev) {
+          next = { ...prev };
+        }
+        delete next[prop];
+      }
+    });
+    return next;
+  };
