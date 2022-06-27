@@ -306,6 +306,24 @@ const DataView = () => {
 };
 ```
 
+Slot can work with local/global mode
+
+```js
+const theme = signal("dark");
+// better performance than local slot
+const themeSlot = slot(theme);
+
+const DataView = () => {
+  return (
+    <>
+      <BigDataTable />
+      Local Theme Slot: {slot(theme)}
+      Global Theme Slot: {themeSlot}
+    </>
+  );
+};
+```
+
 ### Element directive
 
 Rativ supports directives through the `directive` function. This is just a side effect over the ref, but is useful in that it resembles typical bindings and there can be multiple bindings on the same element without conflict. This makes it a better tool for reusable DOM element behavior.

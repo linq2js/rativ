@@ -989,7 +989,7 @@ export const SlotInner = memo((props: { render: () => any }) => {
 
 export const SlotWrapper: FC<{ slot: any }> = (props) => {
   const slotRef = useRef(props.slot);
-  const tokenRef = useRef({});
+  const contextRef = useRef<{ token?: {}; slot?: any }>({});
   const render = useState(() =>
     createStableFunction(() =>
       typeof slotRef.current === "function"
@@ -997,18 +997,22 @@ export const SlotWrapper: FC<{ slot: any }> = (props) => {
         : slotRef.current.get
     )
   )[0];
+
   slotRef.current = props.slot;
 
   // change token if the slot is function, this makes SlotInner re-render to update latest result of render function
-  if (typeof props.slot === "function") {
-    tokenRef.current = {};
+  if (
+    typeof props.slot === "function" &&
+    contextRef.current.slot !== props.slot
+  ) {
+    contextRef.current = { slot: props.slot, token: {} };
   }
-  return createElement(SlotInner, { render, token: tokenRef.current });
+  return createElement(SlotInner, { render, token: contextRef.current.token });
 };
 
 /**
  * create a slot that update automatically when input signal/computed value is changed
- * @param input
+ * @param slot
  * @returns
  */
 export const slot: CreateSlot = (slot): any => {
