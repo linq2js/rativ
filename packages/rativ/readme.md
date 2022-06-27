@@ -5,7 +5,8 @@
   - [Recipes](#recipes)
     - [Every callbacks are stable](#every-callbacks-are-stable)
     - [Amazing signals](#amazing-signals)
-    - [Perform selective update with Slots](#perform-selective-update-with-slots)
+    - [Dealing with async data](#dealing-with-async-data)
+    - [Selective update with Slots](#selective-update-with-slots)
     - [Element directive](#element-directive)
     - [Mutation helpers](#mutation-helpers)
     - [Performance Test](#performance-test)
@@ -267,6 +268,8 @@ a.state++;
 // CONSOLE: result: 4
 ```
 
+### Dealing with async data
+
 Signal can handle async with ease
 
 ```js
@@ -314,14 +317,51 @@ user.set(
 );
 
 // the above example equivalents to this
-user.set(prev => {
-  return await fetch("https://jsonplaceholder.typicode.com/users/1").then((res) =>
-    res.json()
-  )
-})
+user.set(async (prev) => {
+  const res = await fetch("https://jsonplaceholder.typicode.com/users/1");
+  return await res.json();
+});
 ```
 
-### Perform selective update with Slots
+Async counter example
+
+```js
+import { delay, signal, slot } from "rativ";
+
+const count = signal(0);
+const increment = () => count.set((prev) => delay(1000).then(() => prev + 1));
+
+const CounterWithoutSlot = stable(() => {
+  // a promise object will be thrown if trying access state of processing signal
+  // Suspense will handle a promise object and show fallback
+  return () => (
+    // unstable part
+    <h1 onClick={incrementAsync}>{count.get()}</h1>
+  );
+});
+
+// with slot, dont need to wrap this component by Suspense
+// we can control loading state inside this component
+const CounterWithSlot = stable(() => {
+  // return React node instead of unstable part
+  return (
+    <Suspense fallback="Custom processing message">{slot(count)}</Suspense>
+  );
+});
+
+const App = () => {
+  return (
+    <>
+      <Suspense fallback="Processing...">
+        <CounterWithoutSlot />
+        <CounterWithSlot />
+      </Suspense>
+    </>
+  );
+};
+```
+
+### Selective update with Slots
 
 Sometimes you need some selective parts of the component re-render and keep other parts are stable, you can achieve that goal with slots. Slot can be used with any component type (normal React component and stable component)
 

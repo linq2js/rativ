@@ -24,9 +24,7 @@ export const hydrate = ({ data, onLoad, onSave }: HydrateOptions = {}) => {
       });
       return {
         load() {
-          if (dehydrated) {
-            onLoad?.(key);
-          }
+          onLoad?.(key);
           return hydratedData.get(key);
         },
         save(data: any) {

@@ -13,12 +13,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { mutate as mutateGlobal, Mutation } from "./mutation";
+
+export { Mutation };
 
 export type NoInfer<T> = [T][T extends any ? 0 : never];
 
 export type Listener<T, A = void> = (e: T, a: A) => void;
-
-export type Mutation<T, R = T> = (prev: T) => R;
 
 export type Nullable<T> = T | undefined | null;
 
@@ -108,6 +109,7 @@ export type CreateSlot = {
 export type CallbackGroup = {
   add(callback: Function): VoidFunction;
   call(...args: any[]): void;
+  clear(): void;
 };
 
 const createCallbackGroup = (): CallbackGroup => {
@@ -121,6 +123,9 @@ const createCallbackGroup = (): CallbackGroup => {
         active = false;
         callbacks.delete(callback);
       };
+    },
+    clear() {
+      callbacks.clear();
     },
     call(...args: any[]) {
       // optimize performance
@@ -190,7 +195,8 @@ export type Scope = {
      * initializing phase of stable component
      */
     | "stable";
-  addDependant?: (childChannel: Function) => void;
+  addDependency?: (subscribeChannel: Function) => void;
+  addSignal?: (disposeSignal: VoidFunction) => void;
   addEffect?: (effect: Effect) => void;
   context?: InternalContext;
   onDone?: VoidFunction;
@@ -235,6 +241,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   let initialState: unknown;
   let reducer: Function | undefined;
   let options: EmittableOptions;
+  let loadedState: any;
 
   // signal(initialState, reducer, options)
   if (typeof args[1] === "function") {
@@ -250,6 +257,19 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   let loading = false;
   let changeToken = {};
   let lastContext: Context | undefined;
+  let active = true;
+  const dependencies = new Map<any, Function>();
+
+  if (currentScope?.addSignal) {
+    currentScope.addSignal(() => {
+      active = false;
+      // unsubscribe all dependencies
+      dependencies.forEach((x) => x());
+      allListeners.emit.clear();
+      allListeners.state.clear();
+      allListeners.status.clear();
+    });
+  }
 
   const on = (...args: any[]) => {
     let type: string | undefined;
@@ -276,8 +296,9 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   const handleDependency = (channel: Function) => {
-    if (currentScope?.addDependant) {
-      currentScope.addDependant(channel);
+    if (!active) return;
+    if (currentScope?.addDependency) {
+      currentScope.addDependency(channel);
     }
   };
 
@@ -314,6 +335,8 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     if (stateChanged || statusChanged) {
       changeToken = {};
       allListeners.state.call(state);
+    }
+    if (stateChanged) {
       save?.(state);
     }
   };
@@ -344,7 +367,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
         // disable context
         context: undefined,
         // disable dependency tracking
-        addDependant: undefined,
+        addDependency: undefined,
       });
     }
     if (state === nextState) return;
@@ -374,7 +397,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   const mutate = (...mutations: Mutation<any>[]) => {
-    set(mutations.reduce((prev, mutation) => mutation(prev), state));
+    set(mutateGlobal(state, ...mutations));
     return signal;
   };
 
@@ -397,10 +420,8 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   if (load) {
-    const loaded = load();
-    if (loaded) {
-      state = initialState = loaded.data;
-    }
+    // trigger loading dehydrated data
+    loadedState = load();
   }
 
   // computed signal
@@ -410,7 +431,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
 
     const computeState = state;
     state = undefined;
-    const dependants = new Map();
+
     const invalidateState = () => {
       const context = createContext();
       const execute = () => {
@@ -421,7 +442,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
               context.taskIndex = 0;
               set(computeState(context));
             },
-            dependants,
+            dependencies,
             // invalidate state when dependency signals are changed
             invalidateState,
             { context, type: "computed" }
@@ -448,7 +469,11 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       },
     });
 
-    invalidateState();
+    if (loadedState) {
+      state = loadedState.data;
+    } else {
+      invalidateState();
+    }
   } else {
     // emittable signal
     if (reducer) {
@@ -501,6 +526,9 @@ const createSignal: CreateSignal = (...args: any[]): any => {
         },
       };
       Object.assign(signal, emittableSignal);
+      if (loadedState) {
+        state = loadedState.data;
+      }
       if (options?.initAction) {
         emittableSignal.emit(options.initAction);
       }
@@ -515,7 +543,9 @@ const createSignal: CreateSignal = (...args: any[]): any => {
         },
       });
 
-      if (isPromiseLike(state)) {
+      if (loadedState) {
+        state = loadedState.data;
+      } else if (isPromiseLike(state)) {
         const asyncState = state;
         state = undefined;
         set(asyncState);
@@ -528,22 +558,22 @@ const createSignal: CreateSignal = (...args: any[]): any => {
 
 const collectDependencies = <T>(
   fn: () => T,
-  dependants?: Map<any, any>,
+  dependencies?: Map<any, any>,
   onUpdate?: VoidFunction,
   scope?: Scope
 ) => {
-  const inactiveDependants = new Set(dependants?.keys());
+  const inactiveDependencies = new Set(dependencies?.keys());
 
   return scopeOfWork(fn, {
     ...scope,
-    addDependant(dependant) {
-      inactiveDependants.delete(dependant);
-      if (onUpdate && !dependants?.has(dependant)) {
-        dependants?.set(dependant, dependant(onUpdate));
+    addDependency(dependant) {
+      inactiveDependencies.delete(dependant);
+      if (onUpdate && !dependencies?.has(dependant)) {
+        dependencies?.set(dependant, dependant(onUpdate));
       }
     },
     onDone() {
-      inactiveDependants.forEach((x) => dependants?.delete(x));
+      inactiveDependencies.forEach((x) => dependencies?.delete(x));
       scope?.onDone?.();
     },
   });
@@ -561,7 +591,6 @@ const createStableFunction = (
 
 const createRefs = <R, F = any>(): Refs<R, F> => {
   const refCache = new Map<any, RefObject<any>>();
-
   const refsProxy = new Proxy(
     {},
     {
@@ -677,11 +706,12 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
 
     constructor(props: PropsWithRef) {
       super(props);
-      const dependants = new Map<any, Function>();
+      const dependencies = new Map<any, Function>();
 
       const effects: Effect[] = [];
       const unmountEffects = createCallbackGroup();
       const refsProxy = createRefs();
+      const disposeLocalSignals = createCallbackGroup();
 
       let render: (forceUpdate: Function) => any;
 
@@ -702,6 +732,10 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       const result = scopeOfWork(
         () => component(this._propsProxy as P, refsProxy as R),
         {
+          type: "stable",
+          addSignal(disposeSignal) {
+            disposeLocalSignals.add(disposeSignal);
+          },
           addEffect(effect) {
             effects.push(effect);
           },
@@ -734,7 +768,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
         // We use it to force inner component update whenever signal changed
         forceChildUpdate = forceUpdate;
         if (typeof result === "function") {
-          return collectDependencies(result, dependants, rerender, {
+          return collectDependencies(result, dependencies, rerender, {
             type: "component",
             onDone: updateForwardedRef,
           });
@@ -745,9 +779,10 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       };
 
       this._unmount = () => {
+        disposeLocalSignals.call();
         unmountEffects.call();
-        dependants.forEach((x) => x());
-        dependants.clear();
+        dependencies.forEach((x) => x());
+        dependencies.clear();
       };
     }
 
@@ -979,7 +1014,7 @@ export const task = <T, A extends any[]>(
                   throw ex;
                 }
               }, // disable dependent registration
-              { addDependant: undefined }
+              { addDependency: undefined }
             );
           },
           {
@@ -1002,13 +1037,13 @@ export const task = <T, A extends any[]>(
 export const SlotInner = memo((props: { render: () => any }) => {
   const rerender = useState<any>()[1];
   const context = useState(() => ({
-    dependants: new Map(),
+    dependencies: new Map<any, Function>(),
     rerender: () => rerender({}),
   }))[0];
 
   return collectDependencies(
     props.render,
-    context.dependants,
+    context.dependencies,
     context.rerender,
     { type: "component" }
   );
@@ -1094,7 +1129,7 @@ export const watch: Watch = (watchFn, options) => {
     options = { callback: options };
   }
   const { callback, compare } = options ?? {};
-  let dependants = new Map<any, Function>();
+  let dependencies = new Map<any, Function>();
   let firstTime = true;
   let active = true;
   let prevValue: any;
@@ -1103,11 +1138,11 @@ export const watch: Watch = (watchFn, options) => {
     if (!active) return;
     const value = collectDependencies(
       watchFn as unknown as () => unknown,
-      dependants,
+      dependencies,
       startWatching,
       {
         type: "task",
-        addDependant: undefined,
+        addDependency: undefined,
       }
     );
 
@@ -1128,6 +1163,6 @@ export const watch: Watch = (watchFn, options) => {
 
   return () => {
     active = false;
-    dependants.forEach((x) => x());
+    dependencies.forEach((x) => x());
   };
 };
