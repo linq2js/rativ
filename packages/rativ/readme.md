@@ -5,6 +5,9 @@
   - [Recipes](#recipes)
     - [Every callbacks are stable](#every-callbacks-are-stable)
     - [Amazing signals](#amazing-signals)
+    - [Perform selective update with Slots](#perform-selective-update-with-slots)
+    - [Element directive](#element-directive)
+    - [Mutation helpers](#mutation-helpers)
     - [Performance Test](#performance-test)
   - [Caveats](#caveats)
     - [Do not destruct props object](#do-not-destruct-props-object)
@@ -72,6 +75,20 @@ const MyComp = stable((props) => {
     const dynamicVariable = useMemo(() => {}, [props.something]);
     return <button onClick={handleClick}></button>;
   };
+});
+```
+
+If you think you component does not need to re-render any more, just returning React node instead of unstable part
+
+```js
+const StableGreating = stable((props) => {
+  // Even though the component doesn't re-render, the values of the props are still up to date
+  return <button onClick={() => alert(props.message)}>Greeting</button>;
+});
+// The above component works different this memoized component
+const MemoizedGreating = memo((props) => {
+  // this component will re-render when message prop changed and returns new React node with new callback
+  return <button onClick={() => alert(props.message)}>Greeting</button>;
 });
 ```
 
@@ -161,9 +178,10 @@ const Counter = stable(() => {
 });
 ```
 
-There are 3 kinds of signal: computed, emittable, and normal signals
+There are 3 kinds of signal: computed, emittable, and updatable signals
 
 ```js
+import { task, signal } from "rative";
 // normal signal, you can update it by using set() function or assign new value to countSignal.state
 const countSignal = signal(0);
 const factorSignal = signal(1);
@@ -175,11 +193,26 @@ const bigCountSignal = signal(() => {
 });
 // you can update the computed signal, but you must be aware that when its dependency signals are changed, it receives a new value from a computed function
 const accessTokenSignal = signal("USER_ACCESS_TOKEN");
-// computed signal can works with async function
-const userProfileSignal = signal(async () => {
+
+const getUserProfile = (token) =>
+  fetch("API_URL", { headers: { authorization: token } }).then((res) =>
+    res.json()
+  );
+
+const userProfileSignal = signal(() => {
+  // define tasks, the task runs once
+  // the task uses to handle async call or heavy computation
+  const getUserProfileTask = task(getUserProfile);
+  // similar tasks
+  const delayIn10msTask = task(() => delay(10));
+  const delayIn20msTask = task(() => delay(20));
+  // DO NOT DO THIS
+  const delayTask = task(delay); // delayTask(10); delayTask(20);
+
   const accessToken = accessTokenSignal.get();
   if (!accessToken) return { name: "Anonymous" };
-  const profile = await getUserProfile(accessToken);
+  // no await needed
+  const profile = getUserProfileTask(accessToken);
   return pofile;
 });
 
@@ -207,6 +240,147 @@ const counterSignal = signal(0, (state, action) => {
 
 counterSignal.emit("increment");
 counterSignal.emit("decrement");
+```
+
+To handle signal changes, you can use `watch` function. A `watch` function retrieves changeSelector and options
+
+```js
+const a = signal(1);
+const b = signal(2);
+let sum: number;
+
+// when result of a plus b is changed, the watch callback will be called
+watch(
+  () => a.get() + b.get(),
+  (result) => {
+    console.log("result:", result);
+  }
+);
+
+// OR we can pass only the watching change function, the function will be called immediately after watching starts and whenever the signals that it depends on changed
+watch(() => {
+  sum = a.get() + b.get();
+});
+console.log(sum); // CONSOLE: 3
+
+a.state++;
+// CONSOLE: result: 4
+```
+
+### Perform selective update with Slots
+
+Sometimes you need some selective parts of the component re-render and keep other parts are stable, you can achieve that goal with slots. Slot can be used with any component type (normal React component and stable component)
+
+```js
+const theme = signal("dark");
+
+const Counter = stable(() => {
+  const count = signal(0);
+
+  // we returns React node instead of unstable part, that means the button does not re-render any more
+  return (
+    <>
+      <button>
+        Counter:
+        {
+          // we still need display current count value
+          slot(count) // this equipvalent to slot(() => count.get())
+        }
+      </button>
+      Theme: {
+        // slot can be used with local/global signals
+        slot(theme)
+      }
+    </>
+  );
+});
+
+// using slot with normal React component
+const DataView = () => {
+  return (
+    <>
+      <BigDataTable />
+      Theme {slot(theme)}
+    </>
+  );
+};
+```
+
+### Element directive
+
+Rativ supports directives through the `directive` function. This is just a side effect over the ref, but is useful in that it resembles typical bindings and there can be multiple bindings on the same element without conflict. This makes it a better tool for reusable DOM element behavior.
+
+```js
+import { directive } from "rativ";
+// define clickOutside directive
+const clickOutside = (onClick) => {
+  // return a directive body
+  return (element: HTMLElement) => {
+    const handleClick = (e: any) => !element.contains(e.target) && onClick();
+    document.body.addEventListener("click", handleClick);
+    return () => {
+      document.body.removeEventListener("click", handleClick);
+    };
+  };
+};
+
+const Modal = stable(() => {
+  const show = signal(true);
+  const showModal = () => show.set(true);
+  const hideModal = () => show.set(false);
+  const modalRef = directive(clickOutside(hideModal)); // it also support multiple directives directive([dir1, dir2, dir3, ...])
+
+  return () => (
+    <>
+      {!show.get() && <button onClick={showModal}>Show modal</button>}
+      {show.get() && (
+        <div className="modal" ref={modalRef}>
+          Modal contents
+        </div>
+      )}
+    </>
+  );
+});
+```
+
+### Mutation helpers
+
+Rativ provides a slot of mutation helpers, that helps you to mutate signal state with ease, chaining update
+
+```js
+import { sort, prop, item, push, add, toggle, push } from "rative/mutation";
+
+const complexData = signal({
+  userCount: 1,
+  token: "",
+  todos: [
+    { id: 1, title: "Todo 1", completed: true },
+    { id: 2, title: "Todo 2", completed: false },
+  ],
+});
+
+complexData.mutate(
+  // increse userCount
+  prop("userCount", add(10)),
+  // change token value
+  prop("token", () => Math.random().toString()),
+  prop(
+    "todos",
+    // update items that match predicate
+    item(
+      (todo) => todo.id === 1,
+      // rename todo
+      prop("title", () => "TODO 1"),
+      // toggle the boolean value
+      prop("completed", toggle())
+    ),
+    // remove todo(2) from the todos array
+    exclude((todo) => todo.id === 2),
+    push({ id: 3, title: "Todo 3" }, { id: 4, title: "Todo 4" }),
+    // sort the todo list by title
+    sort((x) => x.asc("title")) // this equipvalents to sort(x => x.asc(todo => todo.title))
+  )
+);
 ```
 
 ### Performance Test

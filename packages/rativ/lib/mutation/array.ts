@@ -180,6 +180,8 @@ export type Compare<T> = (a: T, b: T) => number;
 
 export type SortBuilder<T> = {
   add(...compareFns: Compare<T>[]): SortBuilder<T>;
+  asc<P extends keyof T>(prop: P, compare?: Compare<T[P]>): SortBuilder<T>;
+  desc<P extends keyof T>(prop: P, compare?: Compare<T[P]>): SortBuilder<T>;
   asc<R>(selector: (value: T) => R, compare?: Compare<R>): SortBuilder<T>;
   desc<R>(selector: (value: T) => R, compare?: Compare<R>): SortBuilder<T>;
 };
@@ -203,11 +205,19 @@ const createSortBuilder = <T>(sortFns: Compare<T>[]): SortBuilder<T> => {
       sortFns.push(...compareFns);
       return this;
     },
-    asc(selector, compare) {
+    asc(selector: any, compare: any) {
+      if (typeof selector === "string") {
+        const prop = selector;
+        selector = (x: any) => x?.[prop];
+      }
       sortFns.push(orderBy(selector, 1, compare));
       return this;
     },
-    desc(selector, compare) {
+    desc(selector: any, compare: any) {
+      if (typeof selector === "string") {
+        const prop = selector;
+        selector = (x: any) => x?.[prop];
+      }
       sortFns.push(orderBy(selector, -1, compare));
       return this;
     },

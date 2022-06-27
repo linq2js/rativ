@@ -142,7 +142,7 @@ test("sort", () => {
     { name: "A", age: 2 },
     { name: "B", age: 1 },
   ]);
-  data.mutate(sort((b) => b.desc((x) => x.name).asc((x) => x.age)));
+  data.mutate(sort((b) => b.desc((x) => x.name).asc("age")));
   expect(data.state).toEqual([
     { name: "B", age: 1 },
     { name: "A", age: 1 },

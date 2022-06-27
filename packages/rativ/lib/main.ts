@@ -191,9 +191,14 @@ export type Task<T, A extends any[]> = (...args: A) => T & {
   runner(...args: A): () => T;
 };
 
+export type Watch = {
+  <T>(changeSelector: () => T, callback: (value: T) => void): VoidFunction;
+  <T>(changeSelector: () => T, options: WatchOptions<T>): VoidFunction;
+};
+
 export type WatchOptions<T> = {
   defer?: boolean;
-  callback?: (value: T) => void;
+  callback?: (value: T) => any;
   compare?: (a: T, b: T) => boolean;
 };
 
@@ -1053,27 +1058,27 @@ export const delay = <T = void>(ms: number, resolved?: T) =>
 
 export { createSignal as signal, createStableComponent as stable };
 
-/**
- * start watching signal changes
- * @param watchFn
- * @param callback
- * @returns
- */
-export const watch = <T>(
-  watchFn: () => T,
-  { callback, compare }: NoInfer<WatchOptions<T>> = {}
-) => {
+export const watch: Watch = (watchFn, options) => {
+  if (typeof options === "function") {
+    options = { callback: options };
+  }
+  const { callback, compare } = options ?? {};
   let dependants = new Map<any, Function>();
   let firstTime = true;
   let active = true;
-  let prevValue: T;
+  let prevValue: any;
 
   const startWatching = () => {
     if (!active) return;
-    const value = collectDependencies(watchFn, dependants, startWatching, {
-      type: "task",
-      addDependant: undefined,
-    });
+    const value = collectDependencies(
+      watchFn as unknown as () => unknown,
+      dependants,
+      startWatching,
+      {
+        type: "task",
+        addDependant: undefined,
+      }
+    );
 
     if (firstTime) {
       firstTime = false;
