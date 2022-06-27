@@ -60,16 +60,27 @@ export type EmittableSignal<T = any, A = void> = Signal<T> & {
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
 };
 
-export type EmittableOptions<A = any> = {
+export type SignalOptions = {
+  load?: () => { data: any } | undefined;
+  save?: (data: any) => void;
+};
+
+export type EmittableOptions<A = any> = SignalOptions & {
   initAction?: A;
 };
 
 export type ComputedSignal<T> = UpdatableSignal<T>;
 
 export type CreateSignal = {
-  <T>(computeFn: (context: Context) => T): ComputedSignal<T>;
+  <T>(
+    computeFn: (context: Context) => T,
+    options?: SignalOptions
+  ): ComputedSignal<T>;
 
-  <T>(initialState: Promise<T> | T): UpdatableSignal<T>;
+  <T>(
+    initialState: Promise<T> | T,
+    options?: SignalOptions
+  ): UpdatableSignal<T>;
 
   <T, A = void>(
     initialState: T,
@@ -215,16 +226,24 @@ const scopeOfWork = (fn: (scope: Scope) => any, scope?: Scope): any => {
   }
 };
 
-const createSignal: CreateSignal = (
-  initialState: unknown,
-  reducer?: Function,
-  options?: EmittableOptions
-): any => {
+const createSignal: CreateSignal = (...args: any[]): any => {
   const allListeners = {
     emit: createCallbackGroup(),
     state: createCallbackGroup(),
     status: createCallbackGroup(),
   };
+  let initialState: unknown;
+  let reducer: Function | undefined;
+  let options: EmittableOptions;
+
+  // signal(initialState, reducer, options)
+  if (typeof args[1] === "function") {
+    [initialState, reducer, options] = args;
+  } else {
+    [initialState, options] = args;
+  }
+
+  const { load, save } = options ?? {};
 
   let state = initialState;
   let error: any;
@@ -295,6 +314,7 @@ const createSignal: CreateSignal = (
     if (stateChanged || statusChanged) {
       changeToken = {};
       allListeners.state.call(state);
+      save?.(state);
     }
   };
 
@@ -376,6 +396,13 @@ const createSignal: CreateSignal = (
     },
   };
 
+  if (load) {
+    const loaded = load();
+    if (loaded) {
+      state = initialState = loaded.data;
+    }
+  }
+
   // computed signal
   if (typeof state === "function") {
     // is normal signal, it has state getter/setter
@@ -437,7 +464,7 @@ const createSignal: CreateSignal = (
               scopeOfWork(
                 () => {
                   context.taskIndex = 0;
-                  const nextState = reducer(state, action, context);
+                  const nextState = reducer!(state, action, context);
                   set(nextState);
                 },
                 { type: "emittable", context }

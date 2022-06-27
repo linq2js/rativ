@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/hydration/index.js",
+  "types": "../dist/tsc/hydration/index.d.ts"
+}

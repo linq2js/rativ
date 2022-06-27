@@ -109,6 +109,25 @@ test("emittable: async", async () => {
   expect(emittalbe.state).toBe(0);
 });
 
+test("emittable: init", () => {
+  const emittalbe = signal(
+    0,
+    (state, action: "inc" | "dec" | "init") => {
+      if (action === "init") return 100;
+      if (action === "inc") return state + 1;
+      if (action === "dec") return state - 1;
+      return state;
+    },
+    { initAction: "init" }
+  );
+
+  expect(emittalbe.state).toBe(100);
+  emittalbe.emit("inc");
+  expect(emittalbe.state).toBe(101);
+  emittalbe.emit("dec");
+  expect(emittalbe.state).toBe(100);
+});
+
 test("task", async () => {
   const emittable = signal(0, () => {
     const delayTask = task(delay);

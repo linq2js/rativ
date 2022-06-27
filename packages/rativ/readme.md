@@ -267,6 +267,60 @@ a.state++;
 // CONSOLE: result: 4
 ```
 
+Signal can handle async with ease
+
+```js
+const user = signal(
+  fetch("https://jsonplaceholder.typicode.com/users/1").then((res) =>
+    res.json()
+  )
+);
+console.log(user.loading); // true
+console.log(user.state); // undefined
+// wait in few seconds
+console.log(user.loading); // false
+console.log(user.state);
+/*
+{
+  "id": 1,
+  "name": "Leanne Graham",
+  "username": "Bret",
+  "email": "Sincere@april.biz",
+  "address": {
+    "street": "Kulas Light",
+    "suite": "Apt. 556",
+    "city": "Gwenborough",
+    "zipcode": "92998-3874",
+    "geo": {
+      "lat": "-37.3159",
+      "lng": "81.1496"
+    }
+  },
+  "phone": "1-770-736-8031 x56442",
+  "website": "hildegard.org",
+  "company": {
+    "name": "Romaguera-Crona",
+    "catchPhrase": "Multi-layered client-server neural-net",
+    "bs": "harness real-time e-markets"
+  }
+}
+*/
+
+// assigning promise object to signal
+user.set(
+  fetch("https://jsonplaceholder.typicode.com/users/1").then((res) =>
+    res.json()
+  )
+);
+
+// the above example equivalents to this
+user.set(prev => {
+  return await fetch("https://jsonplaceholder.typicode.com/users/1").then((res) =>
+    res.json()
+  )
+})
+```
+
 ### Perform selective update with Slots
 
 Sometimes you need some selective parts of the component re-render and keep other parts are stable, you can achieve that goal with slots. Slot can be used with any component type (normal React component and stable component)

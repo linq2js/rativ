@@ -17,6 +17,7 @@
   "files": [
     "lib",
     "mutation",
+    "hydration",
     "dist/tsc"
   ],
   "keywords": [
