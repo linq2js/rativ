@@ -11,6 +11,10 @@ export const hydrate = ({ data, onLoad, onSave }: HydrateOptions = {}) => {
   let dehydrated = false;
   const pending = new Set<unknown>();
 
+  /**
+   * for SSR
+   * @returns
+   */
   const dehydrate = async () => {
     await allDataReady;
     return Array.from(hydratedData.entries());

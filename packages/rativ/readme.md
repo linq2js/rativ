@@ -12,6 +12,7 @@
     - [Performance Test](#performance-test)
   - [Caveats](#caveats)
     - [Do not destruct props object](#do-not-destruct-props-object)
+    - [Taking snapshot of signal](#taking-snapshot-of-signal)
   - [API reference](#api-reference)
 
 # `Rativ`
@@ -525,6 +526,38 @@ const GreetingButton = stable(({ message }) => {
   };
   return <button onClick={onClick}>Say Hi</button>;
 });
+```
+
+### Taking snapshot of signal
+
+Rativ signal can create and revert snapshot with ease. The signal snapshot is useful for writing unit testing
+
+```js
+import { snapshot, signal } from "rativ";
+
+const count = signal(0);
+count.state++; // count = 1
+// create a snapshot from current state
+const revertCount1 = count.snapshot();
+count.state++; // count = 2
+reverCount1();
+count.state; // count = 1
+count.state++; // count = 2
+// create a snapshot with initial state
+const revertCount2 = count.snapshort(true);
+count.state; // count = 0
+reverCount1();
+count.state; // count = 2
+
+// create snapshot for multiple signals
+const revertAll = snapshot([signal1, signal2] /*, reset  */);
+
+// execute the callback with new snapshots (from current state) of signal1 and signal2
+// after callback done, the input signals are reverted automatically
+snapshot([signal1, signal2], callback);
+
+// execute the callback with new snapshots (from initial state) of signal1 and signal2
+snapshot([signal1, signal2], reset, callback);
 ```
 
 ## API reference

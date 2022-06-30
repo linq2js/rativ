@@ -39,6 +39,7 @@ export type Signal<T = any> = {
   get(): T;
   reset(): void;
   abort(): void;
+  snapshot(reset?: boolean): VoidFunction;
   readonly state: T;
 };
 
@@ -64,10 +65,14 @@ export type EmittableSignal<T = any, A = void> = Signal<T> & {
 export type SignalOptions = {
   load?: () => { data: any } | undefined;
   save?: (data: any) => void;
+  onChange?: VoidFunction;
+  onError?: (error: any) => void;
+  onLoading?: VoidFunction;
 };
 
 export type EmittableOptions<A = any> = SignalOptions & {
   initAction?: A;
+  onEmit?: (action: A) => void;
 };
 
 export type ComputedSignal<T> = UpdatableSignal<T>;
@@ -250,26 +255,30 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     [initialState, options] = args;
   }
 
-  const { load, save } = options ?? {};
+  const { load, save, onChange, onEmit, onError, onLoading } = options ?? {};
 
-  let state = initialState;
-  let error: any;
-  let loading = false;
-  let changeToken = {};
-  let lastContext: Context | undefined;
-  let active = true;
-  const dependencies = new Map<any, Function>();
+  const createStorage = () => {
+    let state = initialState;
+    let error: any;
+    let loading = false;
+    let changeToken = {};
+    let lastContext: Context | undefined;
+    let active = true;
+    const dependencies = new Map<any, Function>();
 
-  if (currentScope?.addSignal) {
-    currentScope.addSignal(() => {
-      active = false;
-      // unsubscribe all dependencies
-      dependencies.forEach((x) => x());
-      allListeners.emit.clear();
-      allListeners.state.clear();
-      allListeners.status.clear();
-    });
-  }
+    return {
+      state,
+      error,
+      loading,
+      changeToken,
+      lastContext,
+      active,
+      dependencies,
+    };
+  };
+
+  const onInit = createCallbackGroup();
+  let storage = createStorage();
 
   const on = (...args: any[]) => {
     let type: string | undefined;
@@ -290,21 +299,21 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     }
 
     if (!type) {
-      listener(state);
+      listener(storage.state);
     }
     return listeners.add(listener);
   };
 
   const handleDependency = (channel: Function) => {
-    if (!active) return;
+    if (!storage.active) return;
     if (currentScope?.addDependency) {
       currentScope.addDependency(channel);
     }
   };
 
   const abort = () => {
-    lastContext?.abort();
-    lastContext = undefined;
+    storage.lastContext?.abort();
+    storage.lastContext = undefined;
     signal.task = undefined;
   };
 
@@ -316,28 +325,28 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     let statusChanged = false;
     let stateChanged = false;
 
-    if (nextLoading !== loading || nextError !== error) {
-      loading = nextLoading;
-      error = nextError;
+    if (nextLoading !== storage.loading || nextError !== storage.error) {
+      storage.loading = nextLoading;
+      storage.error = nextError;
       statusChanged = true;
     }
 
-    if (nextState !== state) {
-      state = nextState;
+    if (nextState !== storage.state) {
+      storage.state = nextState;
       stateChanged = true;
     }
 
     if (statusChanged) {
-      allListeners.status.call(error);
+      allListeners.status.call(storage.error);
     }
 
     // should notify state listeners if status is changed
     if (stateChanged || statusChanged) {
-      changeToken = {};
-      allListeners.state.call(state);
+      storage.changeToken = {};
+      allListeners.state.call(storage.state);
     }
     if (stateChanged) {
-      save?.(state);
+      save?.(storage.state);
     }
   };
 
@@ -348,47 +357,50 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       scopeType === "emittable" ||
       scopeType === "computed"
     ) {
-      if (loading) {
+      if (storage.loading) {
         throw signal.task;
       }
-      if (error) {
-        throw error;
+      if (storage.error) {
+        throw storage.error;
       }
     }
     handleDependency(allListeners.state.add);
-    return state;
+    return storage.state;
   };
 
   const set = (nextState: (() => any) | any) => {
     if (typeof nextState === "function") {
-      lastContext = createContext();
-      nextState = scopeOfWork(() => nextState(state, lastContext), {
-        type: "updatable",
-        // disable context
-        context: undefined,
-        // disable dependency tracking
-        addDependency: undefined,
-      });
+      storage.lastContext = createContext();
+      nextState = scopeOfWork(
+        () => nextState(storage.state, storage.lastContext),
+        {
+          type: "updatable",
+          // disable context
+          context: undefined,
+          // disable dependency tracking
+          addDependency: undefined,
+        }
+      );
     }
-    if (state === nextState) return;
+    if (storage.state === nextState) return;
     if (isPromiseLike(nextState)) {
       let token: any;
 
       signal.task = nextState
         .then((value) => {
-          if (changeToken !== token) return;
+          if (storage.changeToken !== token) return;
           signal.task = undefined;
           changeStatus(false, undefined, value);
         })
         .catch((error) => {
-          if (changeToken !== token) return;
+          if (storage.changeToken !== token) return;
           signal.task = undefined;
-          changeStatus(false, error, state);
+          changeStatus(false, error, storage.state);
         });
 
       // should change status after lastPromise ready
-      changeStatus(true, undefined, state);
-      token = changeToken;
+      changeStatus(true, undefined, storage.state);
+      token = storage.changeToken;
 
       return;
     }
@@ -397,7 +409,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   const mutate = (...mutations: Mutation<any>[]) => {
-    set(mutateGlobal(state, ...mutations));
+    set(mutateGlobal(storage.state, ...mutations));
     return signal;
   };
 
@@ -405,55 +417,104 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     task: undefined as Promise<any> | undefined,
     get error() {
       handleDependency(allListeners.status.add);
-      return error;
+      return storage.error;
     },
     get loading() {
       handleDependency(allListeners.status.add);
-      return loading;
+      return storage.loading;
     },
     get,
     on,
     abort,
     toJSON() {
-      return state;
+      return storage.state;
+    },
+    snapshot(reset: boolean) {
+      let prevStorage = storage;
+
+      if (reset) {
+        storage = createStorage();
+        // start initializing phase again
+        onInit.call();
+      } else {
+        const dependencies = new Map(storage.dependencies);
+        storage = { ...storage, dependencies };
+      }
+
+      const savedStorage = storage;
+
+      return () => {
+        // dont unsnapshot if storage has been changed since last time
+        if (savedStorage === storage) {
+          storage = prevStorage;
+        }
+      };
     },
   };
 
-  if (load) {
-    // trigger loading dehydrated data
-    loadedState = load();
-  }
+  onInit.add(() => {
+    if (currentScope?.addSignal) {
+      currentScope.addSignal(() => {
+        storage.active = false;
+        // unsubscribe all dependencies
+        storage.dependencies.forEach((x) => x());
+        allListeners.emit.clear();
+        allListeners.state.clear();
+        allListeners.status.clear();
+      });
+    }
+
+    if (load) {
+      // trigger loading dehydrated data
+      loadedState = load();
+    }
+
+    if (onChange) {
+      allListeners.state.add(onChange);
+    }
+
+    if (onError || onLoading) {
+      allListeners.state.add(() => {
+        if (storage.loading) onLoading?.();
+        if (storage.error) onError?.(storage.error);
+      });
+    }
+
+    if (onEmit) {
+      allListeners.emit.add((_: any, action: any) => onEmit(action));
+    }
+  });
 
   // computed signal
-  if (typeof state === "function") {
+  if (typeof storage.state === "function") {
     // is normal signal, it has state getter/setter
     Object.defineProperty(signal, "state", { get, set });
 
-    const computeState = state;
-    state = undefined;
+    const computeState = storage.state;
+    storage.state = undefined;
 
     const invalidateState = () => {
       const context = createContext();
       const execute = () => {
-        lastContext = context;
+        storage.lastContext = context;
         try {
           collectDependencies(
             () => {
               context.taskIndex = 0;
               set(computeState(context));
             },
-            dependencies,
+            storage.dependencies,
             // invalidate state when dependency signals are changed
             invalidateState,
             { context, type: "computed" }
           );
         } catch (ex) {
           if (isPromiseLike(ex)) {
-            changeStatus(true, undefined, state);
+            changeStatus(true, undefined, storage.state);
             ex.finally(execute);
             return;
           }
-          changeStatus(false, ex, state);
+          changeStatus(false, ex, storage.state);
         }
       };
 
@@ -464,16 +525,18 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       set,
       mutate,
       reset() {
-        state = undefined;
+        storage.state = undefined;
         invalidateState();
       },
     });
 
-    if (loadedState) {
-      state = loadedState.data;
-    } else {
-      invalidateState();
-    }
+    onInit.add(() => {
+      if (loadedState) {
+        storage.state = loadedState.data;
+      } else {
+        invalidateState();
+      }
+    });
   } else {
     // emittable signal
     if (reducer) {
@@ -481,15 +544,15 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       Object.defineProperty(signal, "state", { get });
       const emittableSignal = {
         emit(action: any) {
-          allListeners.emit.call(state, action);
-          const context = (lastContext = createContext());
+          allListeners.emit.call(storage.state, action);
+          const context = (storage.lastContext = createContext());
 
           const emitInternal = () => {
             try {
               scopeOfWork(
                 () => {
                   context.taskIndex = 0;
-                  const nextState = reducer!(state, action, context);
+                  const nextState = reducer!(storage.state, action, context);
                   set(nextState);
                 },
                 { type: "emittable", context }
@@ -500,20 +563,20 @@ const createSignal: CreateSignal = (...args: any[]): any => {
                 let token: any;
                 signal.task = ex.then(
                   () => {
-                    if (token !== changeToken) return;
+                    if (token !== storage.changeToken) return;
                     emitInternal();
                   },
                   (reason) => {
-                    if (token !== changeToken) return;
-                    changeStatus(false, reason, state);
+                    if (token !== storage.changeToken) return;
+                    changeStatus(false, reason, storage.state);
                   }
                 );
-                changeStatus(true, undefined, state);
-                token = changeToken;
+                changeStatus(true, undefined, storage.state);
+                token = storage.changeToken;
                 return signal;
               }
               console.log(ex);
-              changeStatus(false, ex, state);
+              changeStatus(false, ex, storage.state);
             }
 
             return signal;
@@ -527,7 +590,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       };
       Object.assign(signal, emittableSignal);
       if (loadedState) {
-        state = loadedState.data;
+        storage.state = loadedState.data;
       }
       if (options?.initAction) {
         emittableSignal.emit(options.initAction);
@@ -543,15 +606,19 @@ const createSignal: CreateSignal = (...args: any[]): any => {
         },
       });
 
-      if (loadedState) {
-        state = loadedState.data;
-      } else if (isPromiseLike(state)) {
-        const asyncState = state;
-        state = undefined;
-        set(asyncState);
-      }
+      onInit.add(() => {
+        if (loadedState) {
+          storage.state = loadedState.data;
+        } else if (isPromiseLike(storage.state)) {
+          const asyncState = storage.state;
+          storage.state = undefined;
+          set(asyncState);
+        }
+      });
     }
   }
+
+  onInit.call();
 
   return signal;
 };
@@ -1165,4 +1232,38 @@ export const watch: Watch = (watchFn, options) => {
     active = false;
     dependencies.forEach((x) => x());
   };
+};
+
+export type SnapshotFn = {
+  (signals: Signal[], reset?: boolean): VoidFunction;
+  <T>(signals: Signal[], callback: () => T): T;
+  <T>(signals: Signal[], reset: boolean, callback: () => T): T;
+};
+
+export const snapshot: SnapshotFn = (
+  signals: Signal[],
+  ...args: any[]
+): any => {
+  const revert = createCallbackGroup();
+  let callback: VoidFunction | undefined;
+  let reset = false;
+
+  if (typeof args[0] === "function") {
+    [callback] = args;
+  } else {
+    [reset, callback] = args;
+  }
+
+  signals.forEach((signal) => {
+    revert.add(signal.snapshot(reset));
+  });
+  if (callback) {
+    const result = callback();
+    if (isPromiseLike(result)) {
+      return result.finally(revert.call);
+    }
+    revert.call();
+    return result;
+  }
+  return revert.call;
 };
