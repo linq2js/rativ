@@ -5,9 +5,9 @@ test("simple snapshot", () => {
   count.state++;
   expect(count.state).toBe(1);
   const s1 = count.snapshot();
-  expect(count.state).toBe(0);
+  expect(count.state).toBe(1);
   count.state += 3;
-  expect(count.state).toBe(3);
+  expect(count.state).toBe(4);
   s1();
   expect(count.state).toBe(1);
 });

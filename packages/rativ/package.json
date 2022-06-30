@@ -43,5 +43,6 @@
     "clean": "rm -rf dist build package",
     "ts-node": "ts-node",
     "build": "rimraf dist && tsc"
-  }
+  },
+  "gitHead": "4c2b6ec912c575b71902bbd7fe534eace518dc32"
 }
