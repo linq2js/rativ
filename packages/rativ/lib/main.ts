@@ -207,7 +207,8 @@ export type Scope = {
   onDone?: VoidFunction;
 };
 
-export type Task<T, A extends any[]> = (...args: A) => T & {
+export type Task<T, A extends any[]> = {
+  (...args: A): T;
   readonly aborted: boolean;
   abort(): void;
   runner(...args: A): () => T;
