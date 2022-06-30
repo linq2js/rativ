@@ -263,10 +263,12 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     let loading = false;
     let changeToken = {};
     let lastContext: Context | undefined;
+    let task: Promise<any> | undefined;
     let active = true;
     const dependencies = new Map<any, Function>();
 
     return {
+      task,
       state,
       error,
       loading,
@@ -314,7 +316,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   const abort = () => {
     storage.lastContext?.abort();
     storage.lastContext = undefined;
-    signal.task = undefined;
+    storage.task = undefined;
   };
 
   const changeStatus = (
@@ -358,7 +360,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       scopeType === "computed"
     ) {
       if (storage.loading) {
-        throw signal.task;
+        throw storage.task;
       }
       if (storage.error) {
         throw storage.error;
@@ -386,15 +388,15 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     if (isPromiseLike(nextState)) {
       let token: any;
 
-      signal.task = nextState
+      storage.task = nextState
         .then((value) => {
           if (storage.changeToken !== token) return;
-          signal.task = undefined;
+          storage.task = undefined;
           changeStatus(false, undefined, value);
         })
         .catch((error) => {
           if (storage.changeToken !== token) return;
-          signal.task = undefined;
+          storage.task = undefined;
           changeStatus(false, error, storage.state);
         });
 
@@ -404,7 +406,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
 
       return;
     }
-    signal.task = undefined;
+    storage.task = undefined;
     changeStatus(false, undefined, nextState);
   };
 
@@ -414,7 +416,9 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   const signal = {
-    task: undefined as Promise<any> | undefined,
+    get task() {
+      return storage.task;
+    },
     get error() {
       handleDependency(allListeners.status.add);
       return storage.error;
@@ -510,7 +514,19 @@ const createSignal: CreateSignal = (...args: any[]): any => {
           );
         } catch (ex) {
           if (isPromiseLike(ex)) {
+            let token: any;
+            storage.task = ex.then(
+              () => {
+                if (token !== storage.changeToken) return;
+                execute();
+              },
+              (reason) => {
+                if (token !== storage.changeToken) return;
+                changeStatus(false, reason, storage.state);
+              }
+            );
             changeStatus(true, undefined, storage.state);
+            token = storage.changeToken;
             ex.finally(execute);
             return;
           }
@@ -546,8 +562,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
         emit(action: any) {
           allListeners.emit.call(storage.state, action);
           const context = (storage.lastContext = createContext());
-
-          const emitInternal = () => {
+          const execute = () => {
             try {
               scopeOfWork(
                 () => {
@@ -561,10 +576,10 @@ const createSignal: CreateSignal = (...args: any[]): any => {
               // run reducer again dependency signals are in progress
               if (isPromiseLike(ex)) {
                 let token: any;
-                signal.task = ex.then(
+                storage.task = ex.then(
                   () => {
                     if (token !== storage.changeToken) return;
-                    emitInternal();
+                    execute();
                   },
                   (reason) => {
                     if (token !== storage.changeToken) return;
@@ -582,7 +597,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
             return signal;
           };
 
-          return emitInternal();
+          return execute();
         },
         reset() {
           set(initialState);

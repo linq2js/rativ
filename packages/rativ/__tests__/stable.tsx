@@ -1,6 +1,14 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { act, fireEvent, render } from "@testing-library/react";
-import { defaultProps, Signal, signal, stable } from "../lib/main";
+import {
+  defaultProps,
+  delay,
+  Signal,
+  signal,
+  slot,
+  stable,
+  task,
+} from "../lib/main";
 
 test("default props", () => {
   const Component = stable((props: { message?: string }) => {
@@ -46,4 +54,23 @@ test("dispose local signals", () => {
   // try to change the global signal and make sure the local signal is not affected
   globalSignal.state++;
   expect(localSignal?.state).toBe(4);
+});
+
+test("suspense", async () => {
+  const loadDataSignal = signal(() => {
+    const delayTask = task(() => delay(10));
+    delayTask();
+    return 10;
+  });
+  const Component = stable(() => {
+    return (
+      <Suspense fallback={<div data-testid="loading"></div>}>
+        <div data-testid="output">{slot(loadDataSignal)}</div>
+      </Suspense>
+    );
+  });
+  const { getByTestId } = render(<Component />);
+  getByTestId("loading");
+  await act(() => delay(20));
+  expect(getByTestId("output").textContent).toBe("10");
 });
