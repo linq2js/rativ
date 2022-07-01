@@ -328,6 +328,10 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     let statusChanged = false;
     let stateChanged = false;
 
+    if (!nextLoading) {
+      storage.task = undefined;
+    }
+
     if (nextLoading !== storage.loading || nextError !== storage.error) {
       storage.loading = nextLoading;
       storage.error = nextError;
@@ -407,7 +411,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
 
       return;
     }
-    storage.task = undefined;
+
     changeStatus(false, undefined, nextState);
   };
 
@@ -528,7 +532,6 @@ const createSignal: CreateSignal = (...args: any[]): any => {
             );
             changeStatus(true, undefined, storage.state);
             token = storage.changeToken;
-            ex.finally(execute);
             return;
           }
           changeStatus(false, ex, storage.state);
@@ -591,7 +594,6 @@ const createSignal: CreateSignal = (...args: any[]): any => {
                 token = storage.changeToken;
                 return signal;
               }
-              console.log(ex);
               changeStatus(false, ex, storage.state);
             }
 

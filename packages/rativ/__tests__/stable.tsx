@@ -74,3 +74,33 @@ test("suspense", async () => {
   await act(() => delay(20));
   expect(getByTestId("output").textContent).toBe("10");
 });
+
+test("rerender", async () => {
+  const count = signal(() => {
+    const delayTask = task(delay);
+    delayTask(10);
+    return 100;
+  });
+  const factor = signal(1);
+  const result = signal(() => count.get() * factor.get());
+  const Component = stable(() => () => (
+    <div data-testid="output">{result.get()}</div>
+  ));
+  const Wrapper = () => (
+    <Suspense fallback={<div data-testid="loading" />}>
+      <Component />
+    </Suspense>
+  );
+  const { getByTestId } = render(<Wrapper />);
+  getByTestId("loading");
+  await act(() => delay(20));
+  expect(getByTestId("output").textContent).toEqual("100");
+  act(() => {
+    factor.state++;
+  });
+  expect(getByTestId("output").textContent).toEqual("200");
+  act(() => {
+    factor.state++;
+  });
+  expect(getByTestId("output").textContent).toEqual("300");
+});
