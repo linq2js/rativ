@@ -8,6 +8,7 @@ import {
   ForwardRefExoticComponent,
   FunctionComponent,
   memo,
+  ReactNode,
   RefAttributes,
   RefObject,
   useRef,
@@ -15,7 +16,7 @@ import {
 } from "react";
 import { mutate as mutateGlobal, Mutation } from "./mutation";
 
-export { Mutation };
+export type { Mutation };
 
 export type NoInfer<T> = [T][T extends any ? 0 : never];
 
@@ -30,6 +31,7 @@ export type Refs<T extends Record<string, any> = {}, F = any> = {
 };
 
 export type Signal<T = any> = {
+  readonly name: string;
   readonly loading: boolean;
   readonly error: any;
   readonly task: Promise<T> | undefined;
@@ -63,6 +65,7 @@ export type EmittableSignal<T = any, A = void> = Signal<T> & {
 };
 
 export type SignalOptions = {
+  name?: string;
   load?: () => { data: any } | undefined;
   save?: (data: any) => void;
   onChange?: VoidFunction;
@@ -107,8 +110,8 @@ export type Wait = {
 };
 
 export type CreateSlot = {
-  (signal: Signal): FC;
-  (computeFn: () => any): FC;
+  (signal: Signal): ReactNode;
+  (computeFn: () => any): ReactNode;
 };
 
 export type CallbackGroup = {
@@ -190,6 +193,7 @@ export type Effect<R = any> = (
 ) => void | VoidFunction;
 
 export type Scope = {
+  parent?: any;
   type?:
     | "emittable"
     | "computed"
@@ -225,6 +229,8 @@ export type WatchOptions<T> = {
   compare?: (a: T, b: T) => boolean;
 };
 
+export type StableOptions = { name?: string };
+
 let currentScope: Scope | undefined;
 
 const scopeOfWork = (fn: (scope: Scope) => any, scope?: Scope): any => {
@@ -238,12 +244,42 @@ const scopeOfWork = (fn: (scope: Scope) => any, scope?: Scope): any => {
   }
 };
 
+const collectDependencies = <T>(
+  fn: () => T,
+  dependencies?: Map<any, any>,
+  onUpdate?: VoidFunction,
+  scope?: Scope
+) => {
+  const inactiveDependencies = new Set(dependencies?.keys());
+
+  return scopeOfWork(fn, {
+    ...scope,
+    addDependency(dependant) {
+      inactiveDependencies.delete(dependant);
+      if (onUpdate && !dependencies?.has(dependant)) {
+        dependencies?.set(dependant, dependant(onUpdate));
+      }
+    },
+    onDone() {
+      inactiveDependencies.forEach((x) => {
+        const unsubscribe = dependencies?.get(x);
+        if (unsubscribe) {
+          dependencies?.delete(x);
+          unsubscribe();
+        }
+      });
+      scope?.onDone?.();
+    },
+  });
+};
+
 const createSignal: CreateSignal = (...args: any[]): any => {
   const allListeners = {
     emit: createCallbackGroup(),
     state: createCallbackGroup(),
     status: createCallbackGroup(),
   };
+  const key = {};
   let initialState: unknown;
   let reducer: Function | undefined;
   let options: EmittableOptions;
@@ -309,7 +345,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
 
   const handleDependency = (channel: Function) => {
     if (!storage.active) return;
-    if (currentScope?.addDependency) {
+    if (currentScope?.addDependency && currentScope.parent !== key) {
       currentScope.addDependency(channel);
     }
   };
@@ -421,6 +457,9 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   const signal = {
+    get name() {
+      return options?.name;
+    },
     get task() {
       return storage.task;
     },
@@ -515,7 +554,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
             storage.dependencies,
             // invalidate state when dependency signals are changed
             invalidateState,
-            { context, type: "computed" }
+            { parent: key, context, type: "computed" }
           );
         } catch (ex) {
           if (isPromiseLike(ex)) {
@@ -641,29 +680,6 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   return signal;
 };
 
-const collectDependencies = <T>(
-  fn: () => T,
-  dependencies?: Map<any, any>,
-  onUpdate?: VoidFunction,
-  scope?: Scope
-) => {
-  const inactiveDependencies = new Set(dependencies?.keys());
-
-  return scopeOfWork(fn, {
-    ...scope,
-    addDependency(dependant) {
-      inactiveDependencies.delete(dependant);
-      if (onUpdate && !dependencies?.has(dependant)) {
-        dependencies?.set(dependant, dependant(onUpdate));
-      }
-    },
-    onDone() {
-      inactiveDependencies.forEach((x) => dependencies?.delete(x));
-      scope?.onDone?.();
-    },
-  });
-};
-
 const createStableFunction = (
   getCurrent: () => Function,
   context: any = null
@@ -762,8 +778,11 @@ const createPropsProxy = <P extends Record<string, any>>(
   ) as P;
 };
 
+let isStrictMode = false;
+const enqueue = Promise.resolve().then.bind(Promise.resolve());
 const createStableComponent = <P extends Record<string, any>, R extends Refs>(
-  component: (props: P, refs: R) => any | FunctionComponent<P>
+  component: (props: P, refs: R) => any | FunctionComponent<P>,
+  options?: StableOptions
 ): ForwardRefExoticComponent<
   P & RefAttributes<R extends Refs<infer _R, infer F> ? F | undefined : any>
 > => {
@@ -788,6 +807,8 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
     private _propsProxy: P;
     private _unmount: VoidFunction;
     private _mount: VoidFunction;
+    private _unmounted = false;
+    private _mounted = false;
 
     constructor(props: PropsWithRef) {
       super(props);
@@ -872,6 +893,11 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
     }
 
     componentDidMount() {
+      if (this._mounted) {
+        isStrictMode = true;
+        return;
+      }
+      this._mounted = true;
       this._mount();
     }
 
@@ -879,7 +905,25 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       return createElement(Inner, this._propsProxy as any);
     }
     componentWillUnmount() {
-      this._unmount();
+      if (
+        // production mode
+        process.env.NODE_ENV === "production" ||
+        // test mode
+        process.env.NODE_ENV === "test" ||
+        // in strict mode but already unmounted
+        (isStrictMode && this._unmounted)
+      ) {
+        this._unmount();
+      } else {
+        this._unmounted = true;
+        // wait for next call in strict mode
+        enqueue(() => {
+          if (isStrictMode) {
+            return;
+          }
+          this._unmount();
+        });
+      }
     }
   }
 
@@ -888,10 +932,16 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
     propTypes: (component as any).propTypes,
   });
 
-  return memo(
-    forwardRef((props, forwardedRef) =>
-      createElement(Wrapper, { ...props, forwardedRef } as any)
-    )
+  return Object.assign(
+    memo(
+      forwardRef((props, forwardedRef) =>
+        createElement(Wrapper, { ...props, forwardedRef } as any)
+      )
+    ),
+    {
+      displayName:
+        options?.name ?? component.name ?? (component as FC).displayName,
+    }
   ) as any;
 };
 
@@ -1119,7 +1169,7 @@ export const task = <T, A extends any[]>(
   );
 };
 
-export const SlotInner = memo((props: { render: () => any }) => {
+export const SlotInner = memo((props: { render: () => any; token: any }) => {
   const rerender = useState<any>()[1];
   const context = useState(() => ({
     dependencies: new Map<any, Function>(),

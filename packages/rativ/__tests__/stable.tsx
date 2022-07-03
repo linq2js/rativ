@@ -76,6 +76,7 @@ test("suspense", async () => {
 });
 
 test("rerender", async () => {
+  let updateCount = 0;
   const count = signal(() => {
     const delayTask = task(delay);
     delayTask(10);
@@ -83,6 +84,9 @@ test("rerender", async () => {
   });
   const factor = signal(1);
   const result = signal(() => count.get() * factor.get());
+  result.on(() => {
+    updateCount++;
+  });
   const Component = stable(() => () => (
     <div data-testid="output">{result.get()}</div>
   ));
@@ -103,4 +107,5 @@ test("rerender", async () => {
     factor.state++;
   });
   expect(getByTestId("output").textContent).toEqual("300");
+  expect(updateCount).toBe(4);
 });
