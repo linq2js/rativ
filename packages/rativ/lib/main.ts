@@ -779,6 +779,7 @@ const createPropsProxy = <P extends Record<string, any>>(
 };
 
 let isStrictMode = false;
+const envMode = typeof process !== "undefined" && process.env.NODE_ENV;
 const enqueue = Promise.resolve().then.bind(Promise.resolve());
 const createStableComponent = <P extends Record<string, any>, R extends Refs>(
   component: (props: P, refs: R) => any | FunctionComponent<P>,
@@ -907,9 +908,9 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
     componentWillUnmount() {
       if (
         // production mode
-        process.env.NODE_ENV === "production" ||
+        envMode === "production" ||
         // test mode
-        process.env.NODE_ENV === "test" ||
+        envMode === "test" ||
         // in strict mode but already unmounted
         (isStrictMode && this._unmounted)
       ) {
