@@ -1,9 +1,9 @@
-import { signal, watch } from "../lib/main";
+import { atom, watch } from "../lib/main";
 
 test("watch", () => {
   let result = 0;
-  const a = signal(1);
-  const b = signal(2);
+  const a = atom(1);
+  const b = atom(2);
 
   const unwatch = watch(() => a.get() + b.get(), {
     callback: (x) => (result = x),

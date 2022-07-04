@@ -1,5 +1,5 @@
 import React from "react";
-import { directive, signal, stable } from "../lib/main";
+import { directive, atom, stable } from "../lib/main";
 import { fireEvent, render } from "@testing-library/react";
 
 test("click outside", () => {
@@ -14,7 +14,7 @@ test("click outside", () => {
     };
   };
   const Component = stable(() => {
-    const showModal = signal(true);
+    const showModal = atom(true);
     // create directive
     const modalRef = directive(
       clickOutside(() => {

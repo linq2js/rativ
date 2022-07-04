@@ -1,5 +1,5 @@
 import React from "react";
-import { signal, slot, stable } from "../lib/main";
+import { atom, slot, stable } from "../lib/main";
 import { act, fireEvent, render } from "@testing-library/react";
 
 test("slot with signal", () => {
@@ -9,7 +9,7 @@ test("slot with signal", () => {
     return <h1>Other</h1>;
   };
   const Component = stable(() => {
-    const count = signal(0);
+    const count = atom(0);
 
     return (
       <>
@@ -35,9 +35,9 @@ test("slot with computed function", () => {
     return <h1>Other</h1>;
   };
 
-  // even we can put signals outside the component
-  const a = signal(1);
-  const b = signal(2);
+  // even we can put atoms outside the component
+  const a = atom(1);
+  const b = atom(2);
 
   const Component = () => {
     return (

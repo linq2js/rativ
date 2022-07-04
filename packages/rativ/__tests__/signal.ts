@@ -1,7 +1,7 @@
-import { signal, wait, delay, task } from "../lib/main";
+import { atom, wait, delay, task } from "../lib/main";
 
-test("simple siganl", () => {
-  const a = signal(0);
+test("simple atom", () => {
+  const a = atom(0);
   expect(a.state).toBe(0);
   a.state++;
   expect(a.state).toBe(1);
@@ -12,10 +12,10 @@ test("simple siganl", () => {
   expect(a.state).toBe(0);
 });
 
-test("sync computed signal", () => {
-  const a = signal(1);
-  const b = signal(2);
-  const sum = signal(() => a.get() + b.get());
+test("sync computed atom", () => {
+  const a = atom(1);
+  const b = atom(2);
+  const sum = atom(() => a.get() + b.get());
   expect(sum.state).toBe(3);
   a.state++;
   expect(sum.state).toBe(4);
@@ -23,19 +23,19 @@ test("sync computed signal", () => {
   expect(sum.state).toBe(5);
 });
 
-test("async computed signal", async () => {
-  const a = signal(1);
-  const b = signal(2);
-  const sum = signal(() => a.get() + b.get());
+test("async computed atom", async () => {
+  const a = atom(1);
+  const b = atom(2);
+  const sum = atom(() => a.get() + b.get());
   expect(sum.state).toBe(3);
   a.set(delay(10, 2));
   expect(sum.loading).toBe(true);
   await delay(15);
   expect(sum.state).toBe(4);
-  // allow updating for computed signal
+  // allow updating for computed atom
   sum.state = 100;
   expect(sum.state).toBe(100);
-  // but if dependency signals changed, it is still invalidated again
+  // but if dependency atoms changed, it is still invalidated again
   a.set(delay(10, 3));
   await delay(15);
   expect(sum.state).toBe(5);
@@ -44,11 +44,11 @@ test("async computed signal", async () => {
 });
 
 test("wait all", async () => {
-  const a = signal(delay(20, 1));
-  const b = signal(delay(10, 2));
+  const a = atom(delay(20, 1));
+  const b = atom(delay(10, 2));
   expect(a.loading).toBe(true);
   expect(b.loading).toBe(true);
-  const sum = signal(() => {
+  const sum = atom(() => {
     const [av, bv] = wait([a, b]);
     return av + bv;
   });
@@ -63,11 +63,11 @@ test("wait all", async () => {
 });
 
 test("Wait any", async () => {
-  const a = signal(delay(10, 1));
-  const b = signal(delay(5, 2));
+  const a = atom(delay(10, 1));
+  const b = atom(delay(5, 2));
   expect(a.loading).toBe(true);
   expect(b.loading).toBe(true);
-  const sum = signal(() => {
+  const sum = atom(() => {
     const result = wait({ a, b });
     return "a" in result ? "a" : "b";
   });
@@ -78,7 +78,7 @@ test("Wait any", async () => {
 });
 
 test("emittable: sync", () => {
-  const emittalbe = signal(0, (state, action: "inc" | "dec") => {
+  const emittalbe = atom(0, (state, action: "inc" | "dec") => {
     if (action === "inc") return state + 1;
     if (action === "dec") return state - 1;
     return state;
@@ -91,8 +91,8 @@ test("emittable: sync", () => {
 });
 
 test("emittable: async", async () => {
-  const step = signal(delay(10, 1));
-  const emittalbe = signal(0, (state, action: "inc" | "dec") => {
+  const step = atom(delay(10, 1));
+  const emittalbe = atom(0, (state, action: "inc" | "dec") => {
     if (action === "inc") return state + step.get();
     if (action === "dec") return state - step.get();
     return state;
@@ -110,7 +110,7 @@ test("emittable: async", async () => {
 });
 
 test("emittable: init", () => {
-  const emittalbe = signal(
+  const emittalbe = atom(
     0,
     (state, action: "inc" | "dec" | "init") => {
       if (action === "init") return 100;
@@ -129,12 +129,12 @@ test("emittable: init", () => {
 });
 
 test("task", async () => {
-  const emittable = signal(0, () => {
+  const emittable = atom(0, () => {
     const delayTask = task(delay);
     delayTask(10);
     return 1;
   });
-  const computed = signal(() => {
+  const computed = atom(() => {
     const loadDataTask = task(emittable.emit);
     loadDataTask();
     loadDataTask();
@@ -148,8 +148,8 @@ test("task", async () => {
 });
 
 test("toJSON", () => {
-  expect(JSON.stringify(signal(1))).toBe("1");
-  expect(JSON.stringify(signal({ a: 1, b: 2 }))).toBe(
+  expect(JSON.stringify(atom(1))).toBe("1");
+  expect(JSON.stringify(atom({ a: 1, b: 2 }))).toBe(
     JSON.stringify({ a: 1, b: 2 })
   );
 });

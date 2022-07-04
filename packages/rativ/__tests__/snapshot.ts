@@ -1,7 +1,7 @@
-import { signal, snapshot } from "../lib/main";
+import { atom, snapshot } from "../lib/main";
 
 test("simple snapshot", () => {
-  const count = signal(0);
+  const count = atom(0);
   count.state++;
   expect(count.state).toBe(1);
   const s1 = count.snapshot();
@@ -13,8 +13,8 @@ test("simple snapshot", () => {
 });
 
 test("computed snapshot", () => {
-  const count = signal(1);
-  const double = signal(() => count.get() * 2);
+  const count = atom(1);
+  const double = atom(() => count.get() * 2);
   expect(double.state).toBe(2);
   count.state++;
   expect(double.state).toBe(4);
@@ -22,6 +22,6 @@ test("computed snapshot", () => {
     count.state++;
     expect(double.state).toBe(6);
   });
-  // count and double signals are reverted
+  // count and double atoms are reverted
   expect(double.state).toBe(4);
 });

@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { mutate as mutateGlobal, Mutation } from "./mutation";
+import { mutate, Mutation } from "./mutation";
 
 export type { Mutation };
 
@@ -30,7 +30,7 @@ export type Refs<T extends Record<string, any> = {}, F = any> = {
   forwardedRef: ForwardedRef<F>;
 };
 
-export type Signal<T = any> = {
+export type Atom<T = any> = {
   readonly name: string;
   readonly loading: boolean;
   readonly error: any;
@@ -45,12 +45,12 @@ export type Signal<T = any> = {
   readonly state: T;
 };
 
-export type UpdatableSignal<T = any> = Signal<T> & {
+export type UpdatableAtom<T = any> = Atom<T> & {
   state: T;
+  set(...mutation: Mutation<T>[]): UpdatableAtom<T>;
   set(
     value: ((prev: T, context: Context) => T | Promise<T>) | T | Promise<T>
   ): void;
-  mutate(...mutation: Mutation<T>[]): UpdatableSignal<T>;
 };
 
 export type Context = {
@@ -59,12 +59,12 @@ export type Context = {
   abort(): void;
 };
 
-export type EmittableSignal<T = any, A = void> = Signal<T> & {
-  emit(action: A): EmittableSignal<T, A>;
+export type EmittableAtom<T = any, A = void> = Atom<T> & {
+  emit(action: A): EmittableAtom<T, A>;
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
 };
 
-export type SignalOptions = {
+export type AtomOptions = {
   name?: string;
   load?: () => { data: any } | undefined;
   save?: (data: any) => void;
@@ -73,35 +73,32 @@ export type SignalOptions = {
   onLoading?: VoidFunction;
 };
 
-export type EmittableOptions<A = any> = SignalOptions & {
+export type EmittableOptions<A = any> = AtomOptions & {
   initAction?: A;
   onEmit?: (action: A) => void;
 };
 
-export type ComputedSignal<T> = UpdatableSignal<T>;
+export type ComputedAtom<T> = UpdatableAtom<T>;
 
-export type CreateSignal = {
+export type CreateAtom = {
   <T>(
     computeFn: (context: Context) => T,
-    options?: SignalOptions
-  ): ComputedSignal<T>;
+    options?: AtomOptions
+  ): ComputedAtom<T>;
 
-  <T>(
-    initialState: Promise<T> | T,
-    options?: SignalOptions
-  ): UpdatableSignal<T>;
+  <T>(initialState: Promise<T> | T, options?: AtomOptions): UpdatableAtom<T>;
 
   <T, A = void>(
     initialState: T,
     reducer: (state: NoInfer<T>, action: A, context: Context) => T,
     options?: EmittableOptions<A>
-  ): EmittableSignal<T, A>;
+  ): EmittableAtom<T, A>;
 };
 
 export type Wait = {
-  <T>(singal: Signal<T>): T;
+  <T>(singal: Atom<T>): T;
   <S>(awaitables: S): {
-    [key in keyof S]: S[key] extends Signal<infer T>
+    [key in keyof S]: S[key] extends Atom<infer T>
       ? T
       : S[key] extends () => infer T
       ? T
@@ -110,7 +107,7 @@ export type Wait = {
 };
 
 export type CreateSlot = {
-  (signal: Signal): ReactNode;
+  (atom: Atom): ReactNode;
   (computeFn: () => any): ReactNode;
 };
 
@@ -118,6 +115,117 @@ export type CallbackGroup = {
   add(callback: Function): VoidFunction;
   call(...args: any[]): void;
   clear(): void;
+};
+
+export interface ComponentBuilder<C, O, P = O> {
+  /**
+   * create component prop with specified valid values
+   * @param name
+   * @param values
+   */
+  prop<TValue extends string>(
+    name: keyof O,
+    values: TValue[]
+  ): ComponentBuilder<void, O, P & { [key in TValue]?: boolean }>;
+
+  /**
+   * apply memoizing for compound component
+   * @param areEqual
+   */
+  memo(areEqual?: (prev: P, next: P) => boolean): this;
+
+  /**
+   * apply stabling for compound component
+   * @param options
+   */
+  stable(options?: StableOptions): this;
+
+  /**
+   * create computed prop
+   * @param name
+   * @param compute
+   */
+  prop<TName extends string = string, TValue = unknown>(
+    name: TName,
+    compute: (value: TValue, props: P) => Partial<O>
+  ): ComponentBuilder<
+    void,
+    O,
+    P &
+      // optional prop
+      (TValue extends void
+        ? { [key in TName]?: TValue }
+        : { [key in TName]: TValue })
+  >;
+
+  /**
+   * create new prop that has specified values
+   * @param name
+   * @param map
+   */
+  prop<TName extends keyof O, TMap extends Record<string, string>>(
+    name: TName,
+    map: TMap
+  ): ComponentBuilder<void, O, P & { [key in keyof TMap]?: boolean }>;
+
+  map<TName extends keyof O, TValue = O[TName]>(
+    name: TName,
+    mapper: (value: TValue, props: P) => O[TName]
+  ): ComponentBuilder<
+    void,
+    O,
+    P &
+      (TValue extends void
+        ? { [key in TName]?: TValue }
+        : { [key in TName]: TValue })
+  >;
+
+  rename<TOld extends keyof P, TNew extends string>(
+    oldName: TOld,
+    newName: TNew
+  ): ComponentBuilder<void, O, Omit<P, TOld> & { [key in TNew]: P[TOld] }>;
+
+  /**
+   * use renderFn to render compound component, the renderFn retrives compound component, input props, ref
+   * @param renderFn
+   */
+  render<TNewProps = P, TRef = any>(
+    renderFn: (
+      component: FC<P>,
+      props: TNewProps,
+      ref: ForwardedRef<TRef>
+    ) => any
+  ): ComponentBuilder<void, O, TNewProps>;
+
+  /**
+   * use HOC
+   * @param hoc
+   * @param args
+   */
+  use<TNewProps = P, TArgs extends any[] = []>(
+    hoc: (
+      component: FC<P>,
+      ...args: TArgs
+    ) => Component<TNewProps> | FC<TNewProps>,
+    ...args: TArgs
+  ): ComponentBuilder<void, O, TNewProps>;
+
+  /**
+   * end  building process and return a component
+   */
+  end(): (C extends void ? FC<P> : C) & {
+    /**
+     * for typing only, DO NOT USE this for getting value
+     */
+    props: P;
+  };
+}
+
+export type AnyComponent<P> = Component<P> | FC<P>;
+
+export type KeyOf = {
+  <T, E extends keyof T>(obj: T, exclude: E[]): Exclude<keyof T, E>[];
+  <T>(obj: T): (keyof T)[];
 };
 
 const createCallbackGroup = (): CallbackGroup => {
@@ -205,7 +313,7 @@ export type Scope = {
      */
     | "stable";
   addDependency?: (subscribeChannel: Function) => void;
-  addSignal?: (disposeSignal: VoidFunction) => void;
+  onAtomCreated?: (disposeAtom: VoidFunction) => void;
   addEffect?: (effect: Effect) => void;
   context?: InternalContext;
   onDone?: VoidFunction;
@@ -273,7 +381,7 @@ const collectDependencies = <T>(
   });
 };
 
-const createSignal: CreateSignal = (...args: any[]): any => {
+const createAtom: CreateAtom = (...args: any[]): any => {
   const allListeners = {
     emit: createCallbackGroup(),
     state: createCallbackGroup(),
@@ -285,7 +393,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   let options: EmittableOptions;
   let loadedState: any;
 
-  // signal(initialState, reducer, options)
+  // atom(initialState, reducer, options)
   if (typeof args[1] === "function") {
     [initialState, reducer, options] = args;
   } else {
@@ -411,7 +519,16 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     return storage.state;
   };
 
-  const set = (nextState: (() => any) | any) => {
+  const set = (...args: any[]) => {
+    let nextState: any;
+
+    if (typeof args[0] === "function") {
+      nextState =
+        args.length > 1 ? (prev: any) => mutate(prev, ...args) : args[0];
+    } else {
+      nextState = args[0];
+    }
+
     if (typeof nextState === "function") {
       storage.lastContext = createContext();
       nextState = scopeOfWork(
@@ -451,12 +568,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     changeStatus(false, undefined, nextState);
   };
 
-  const mutate = (...mutations: Mutation<any>[]) => {
-    set(mutateGlobal(storage.state, ...mutations));
-    return signal;
-  };
-
-  const signal = {
+  const atom = {
     get name() {
       return options?.name;
     },
@@ -501,8 +613,8 @@ const createSignal: CreateSignal = (...args: any[]): any => {
   };
 
   onInit.add(() => {
-    if (currentScope?.addSignal) {
-      currentScope.addSignal(() => {
+    if (currentScope?.onAtomCreated) {
+      currentScope.onAtomCreated(() => {
         storage.active = false;
         // unsubscribe all dependencies
         storage.dependencies.forEach((x) => x());
@@ -533,10 +645,10 @@ const createSignal: CreateSignal = (...args: any[]): any => {
     }
   });
 
-  // computed signal
+  // computed atom
   if (typeof storage.state === "function") {
-    // is normal signal, it has state getter/setter
-    Object.defineProperty(signal, "state", { get, set });
+    // is normal atom, it has state getter/setter
+    Object.defineProperty(atom, "state", { get, set });
 
     const computeState = storage.state;
     storage.state = undefined;
@@ -552,7 +664,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
               set(computeState(context));
             },
             storage.dependencies,
-            // invalidate state when dependency signals are changed
+            // invalidate state when dependency atoms are changed
             invalidateState,
             { parent: key, context, type: "computed" }
           );
@@ -580,9 +692,8 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       execute();
     };
 
-    Object.assign(signal, {
+    Object.assign(atom, {
       set,
-      mutate,
       reset() {
         storage.state = undefined;
         invalidateState();
@@ -597,11 +708,11 @@ const createSignal: CreateSignal = (...args: any[]): any => {
       }
     });
   } else {
-    // emittable signal
+    // emittable atom
     if (reducer) {
-      // is emittable signal, it has only state getter, and emit method
-      Object.defineProperty(signal, "state", { get });
-      const emittableSignal = {
+      // is emittable atom, it has only state getter, and emit method
+      Object.defineProperty(atom, "state", { get });
+      const emittableAtom = {
         emit(action: any) {
           allListeners.emit.call(storage.state, action);
           const context = (storage.lastContext = createContext());
@@ -616,7 +727,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
                 { type: "emittable", context }
               );
             } catch (ex) {
-              // run reducer again dependency signals are in progress
+              // run reducer again dependency atoms are in progress
               if (isPromiseLike(ex)) {
                 let token: any;
                 storage.task = ex.then(
@@ -631,12 +742,12 @@ const createSignal: CreateSignal = (...args: any[]): any => {
                 );
                 changeStatus(true, undefined, storage.state);
                 token = storage.changeToken;
-                return signal;
+                return atom;
               }
               changeStatus(false, ex, storage.state);
             }
 
-            return signal;
+            return atom;
           };
 
           return execute();
@@ -645,19 +756,18 @@ const createSignal: CreateSignal = (...args: any[]): any => {
           set(initialState);
         },
       };
-      Object.assign(signal, emittableSignal);
+      Object.assign(atom, emittableAtom);
       if (loadedState) {
         storage.state = loadedState.data;
       }
       if (options?.initAction) {
-        emittableSignal.emit(options.initAction);
+        emittableAtom.emit(options.initAction);
       }
     } else {
-      // is updatable signal, it has state getter/setter
-      Object.defineProperty(signal, "state", { get, set });
-      Object.assign(signal, {
+      // is updatable atom, it has state getter/setter
+      Object.defineProperty(atom, "state", { get, set });
+      Object.assign(atom, {
         set,
-        mutate,
         reset() {
           set(initialState);
         },
@@ -677,7 +787,7 @@ const createSignal: CreateSignal = (...args: any[]): any => {
 
   onInit.call();
 
-  return signal;
+  return atom;
 };
 
 const createStableFunction = (
@@ -818,7 +928,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       const effects: Effect[] = [];
       const unmountEffects = createCallbackGroup();
       const refsProxy = createRefs();
-      const disposeLocalSignals = createCallbackGroup();
+      const disposeLocalAtoms = createCallbackGroup();
 
       let render: (forceUpdate: Function) => any;
 
@@ -840,8 +950,8 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
         () => component(this._propsProxy as P, refsProxy as R),
         {
           type: "stable",
-          addSignal(disposeSignal) {
-            disposeLocalSignals.add(disposeSignal);
+          onAtomCreated(disposeAtom) {
+            disposeLocalAtoms.add(disposeAtom);
           },
           addEffect(effect) {
             effects.push(effect);
@@ -872,7 +982,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
 
       render = (forceUpdate) => {
         // the forceUpdate function comes from inner component.
-        // We use it to force inner component update whenever signal changed
+        // We use it to force inner component update whenever atom changed
         forceChildUpdate = forceUpdate;
         if (typeof result === "function") {
           return collectDependencies(result, dependencies, rerender, {
@@ -886,7 +996,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       };
 
       this._unmount = () => {
-        disposeLocalSignals.call();
+        disposeLocalAtoms.call();
         unmountEffects.call();
         dependencies.forEach((x) => x());
         dependencies.clear();
@@ -946,7 +1056,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
   ) as any;
 };
 
-export const isSignal = <T>(value: any): value is Signal<T> => {
+export const isAtom = <T>(value: any): value is Atom<T> => {
   return (
     value &&
     typeof value === "object" &&
@@ -956,30 +1066,30 @@ export const isSignal = <T>(value: any): value is Signal<T> => {
 };
 
 /**
- * if `signals` is an array, wait() works like Promise.all() unless it works like Promise.race()
+ * if `atoms` is an array, wait() works like Promise.all() unless it works like Promise.race()
  * @param awaitables
  * @param autoAbort
  * @returns
  */
 export const wait: Wait = (awaitables, autoAbort?: boolean) => {
   if (!currentScope) {
-    throw new Error("Cannot use wait() helper outside signal");
+    throw new Error("Cannot use wait() helper outside atom");
   }
 
-  if (isSignal(awaitables)) {
+  if (isAtom(awaitables)) {
     if (awaitables.task) throw awaitables.task;
     if (awaitables.error) throw awaitables.error;
     return awaitables.state;
   }
 
   const promises: Promise<any>[] = [];
-  const pending: Signal[] = [];
+  const pending: Atom[] = [];
 
   // wait(awaitables[])
   if (Array.isArray(awaitables)) {
     const results: any[] = [];
     awaitables.forEach((awaitable, index) => {
-      if (isSignal(awaitable)) {
+      if (isAtom(awaitable)) {
         if (awaitable.error) {
           throw awaitable.error;
         }
@@ -1006,14 +1116,14 @@ export const wait: Wait = (awaitables, autoAbort?: boolean) => {
     });
     if (promises.length)
       throw Promise.all(promises).finally(
-        () => autoAbort && pending.forEach((signal) => signal.abort())
+        () => autoAbort && pending.forEach((atom) => atom.abort())
       );
     return results;
   }
   const results: Record<string, any> = {};
   let hasResult = false;
   Object.entries(awaitables).some(([key, awaitable]: [string, any]) => {
-    if (isSignal(awaitable)) {
+    if (isAtom(awaitable)) {
       if (awaitable.error) {
         throw awaitable.error;
       }
@@ -1045,7 +1155,7 @@ export const wait: Wait = (awaitables, autoAbort?: boolean) => {
   });
   if (!hasResult && promises.length)
     throw Promise.race(promises).finally(
-      () => autoAbort && pending.forEach((signal) => signal.abort?.())
+      () => autoAbort && pending.forEach((atom) => atom.abort?.())
     );
   return results;
 };
@@ -1063,7 +1173,7 @@ export const task = <T, A extends any[]>(
   return scopeOfWork(
     ({ context }) => {
       if (!context) {
-        throw new Error("task() helper cannot be called outside signal");
+        throw new Error("task() helper cannot be called outside atom");
       }
 
       let task = context.taskList[context.taskIndex];
@@ -1091,27 +1201,27 @@ export const task = <T, A extends any[]>(
               () => {
                 try {
                   const result = fn(...args);
-                  if (isPromiseLike(result) || isSignal(result)) {
+                  if (isPromiseLike(result) || isAtom(result)) {
                     throw result;
                   }
                   data = result;
                   status = "success";
                   return result;
                 } catch (ex) {
-                  if (isSignal(ex)) {
-                    const signal = ex;
-                    if (!signal.task) {
-                      if (!signal.error) {
-                        return signal.state;
+                  if (isAtom(ex)) {
+                    const atom = ex;
+                    if (!atom.task) {
+                      if (!atom.error) {
+                        return atom.state;
                       }
-                      ex = signal.error;
+                      ex = atom.error;
                     } else {
                       ex = new Promise((resolve, reject) => {
-                        signal.task?.finally(() => {
-                          if (signal.error) {
-                            reject(signal.error);
+                        atom.task?.finally(() => {
+                          if (atom.error) {
+                            reject(atom.error);
                           } else {
-                            resolve(signal.state);
+                            resolve(atom.state);
                           }
                         });
                       });
@@ -1209,7 +1319,7 @@ export const SlotWrapper: FC<{ slot: any }> = (props) => {
 };
 
 /**
- * create a slot that update automatically when input signal/computed value is changed
+ * create a slot that update automatically when input atom/computed value is changed
  * @param slot
  * @returns
  */
@@ -1258,7 +1368,7 @@ export const directive = <E = HTMLElement>(
 export const delay = <T = void>(ms: number, resolved?: T) =>
   new Promise<T>((resolve) => setTimeout(resolve, ms, resolved));
 
-export { createSignal as signal, createStableComponent as stable };
+export { createAtom as atom, createStableComponent as stable };
 
 export const watch: Watch = (watchFn, options) => {
   if (typeof options === "function") {
@@ -1303,14 +1413,14 @@ export const watch: Watch = (watchFn, options) => {
   };
 };
 
-export type SnapshotFn = {
-  (signals: Signal[], reset?: boolean): VoidFunction;
-  <T>(signals: Signal[], callback: () => T): T;
-  <T>(signals: Signal[], reset: boolean, callback: () => T): T;
+export type CreateSnapshot = {
+  (atoms: Atom[], reset?: boolean): VoidFunction;
+  <T>(atoms: Atom[], callback: () => T): T;
+  <T>(atoms: Atom[], reset: boolean, callback: () => T): T;
 };
 
-export const snapshot: SnapshotFn = (
-  signals: Signal[],
+export const snapshot: CreateSnapshot = (
+  atoms: Atom[],
   ...args: any[]
 ): any => {
   const revert = createCallbackGroup();
@@ -1323,8 +1433,8 @@ export const snapshot: SnapshotFn = (
     [reset, callback] = args;
   }
 
-  signals.forEach((signal) => {
-    revert.add(signal.snapshot(reset));
+  atoms.forEach((atom) => {
+    revert.add(atom.snapshot(reset));
   });
   if (callback) {
     const result = callback();
@@ -1336,3 +1446,194 @@ export const snapshot: SnapshotFn = (
   }
   return revert.call;
 };
+
+/**
+ * create a component with special props and HOC
+ * @param component
+ * @returns
+ */
+export const create = <C>(
+  component: C
+): C extends AnyComponent<infer P> ? ComponentBuilder<C, P, P> : never => {
+  const oldNames: Record<string, string> = {};
+  const singlePropMappings: Record<string, { prop: string; value: string }> =
+    {};
+  const multiplePropMappings: Record<string, Function> = {};
+  const hocs: Function[] = [];
+  const mappers: Record<string, Function> = {};
+  let hasMapper = false;
+  let hasPropMap = false;
+
+  const setProp = (
+    inputProps: Record<string, any>,
+    targetProps: Record<string, any>,
+    name: string,
+    value: any
+  ) => {
+    name = oldNames[name] || name;
+    const multiplePropMapping = multiplePropMappings[name];
+    if (multiplePropMapping) {
+      const newProps = multiplePropMapping(value, inputProps);
+      Object.entries(newProps).forEach(([key, value]) => {
+        setProp(inputProps, targetProps, key, value);
+      });
+    } else {
+      const mapTo = singlePropMappings[name];
+      if (mapTo) {
+        value = mapTo.value;
+        name = mapTo.prop;
+      }
+      const mapper = mappers[name];
+      if (mapper) value = mapper(value, inputProps);
+      if (typeof targetProps[name] === "undefined") {
+        targetProps[name] = value;
+      }
+    }
+  };
+
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    prop(name: string, values: string[] | Function) {
+      if (Array.isArray(values)) {
+        values.forEach((value) => {
+          singlePropMappings[value] = { prop: name, value: value };
+        });
+      } else if (typeof values === "function") {
+        multiplePropMappings[name] = values;
+      } else {
+        Object.entries(values).forEach(([key, value]) => {
+          singlePropMappings[key] = { prop: name, value: value as string };
+        });
+      }
+      hasPropMap = true;
+      return this;
+    },
+    use(hoc: Function, ...args: any[]) {
+      hocs.push((component: any) => hoc(component, ...args));
+      return this;
+    },
+    rename(oldName: string, newName: string) {
+      if (oldName !== newName) {
+        oldNames[newName] = oldName;
+      }
+      return this;
+    },
+    render(renderFn: Function) {
+      hocs.push((component: any) =>
+        forwardRef((props, ref) => renderFn(component, props, ref))
+      );
+      return this;
+    },
+    map(name: string, mapper: Function) {
+      mappers[name] = mapper;
+      hasMapper = true;
+      return this;
+    },
+    memo(areEqual: Function) {
+      hocs.push((component: any) => memo(component, areEqual as any));
+      return this;
+    },
+    stable(options: any) {
+      hocs.push((component: any) =>
+        createStableComponent(component, options as any)
+      );
+      return this;
+    },
+    end() {
+      let CompoundComponent = forwardRef(
+        (props: Record<string, unknown>, ref: unknown) => {
+          const mappedProps: Record<string, unknown> = {};
+          // optimize performance
+          if (hasMapper || hasPropMap) {
+            Object.entries(props).forEach(([key, value]) => {
+              setProp(props, mappedProps, key, value);
+            });
+          } else {
+            Object.assign(mappedProps, props);
+          }
+
+          if (ref) mappedProps["ref"] = ref;
+
+          return createElement(component as any, mappedProps);
+        }
+      );
+
+      if (hocs.length) {
+        CompoundComponent = hocs.reduce(
+          (prev, hoc) => hoc(prev),
+          CompoundComponent
+        ) as any;
+      }
+
+      return CompoundComponent;
+    },
+  } as any;
+};
+
+export const keyOf: KeyOf = (
+  obj: Record<string, unknown>,
+  exclude?: string[]
+) => {
+  if (exclude) {
+    return Object.keys(obj).filter((x) => !exclude.includes(x));
+  }
+
+  return Object.keys(obj) as any;
+};
+
+const createAtomFamily = <A extends any[], T = unknown>(
+  createFn: (...args: A) => T
+) => {
+  type Item = Map<any, Item> & { data?: T };
+  type FindItem = {
+    (args: A, createIfNotExist: true): [Item, VoidFunction];
+    (args: A, createIfNotExist: false): [Item, VoidFunction];
+  };
+
+  const root: Item = new Map();
+
+  const findItem: FindItem = (args, createIfNotExist): any => {
+    let current = root;
+    const stack: { key: any; parent: Item }[] = [];
+    const remove = () => {
+      stack.forEach(({ parent, key }) => parent.delete(key));
+    };
+    for (const key of args) {
+      stack.push({ key, parent: current });
+      let next = current.get(key);
+      if (!next) {
+        if (!createIfNotExist) return [undefined, remove];
+        next = new Map();
+        current.set(key, next);
+      }
+      current = next;
+    }
+    return [current, remove];
+  };
+
+  return {
+    get(...args: A) {
+      const [item] = findItem(args, true);
+      let data = item.data;
+      if (!data) {
+        data = createFn(...args);
+        item.data = data;
+      }
+      return data;
+    },
+    clear() {
+      root.clear();
+    },
+    has(...args: A) {
+      const [item] = findItem(args, false);
+      return !!item;
+    },
+    delete(...args: A) {
+      const [item, remove] = findItem(args, false);
+      remove();
+      return item?.data;
+    },
+  };
+};
+
+export { createAtomFamily as family };

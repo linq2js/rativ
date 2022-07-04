@@ -4,7 +4,7 @@
   - [Concepts](#concepts)
   - [Recipes](#recipes)
     - [Every callbacks are stable](#every-callbacks-are-stable)
-    - [Amazing signals](#amazing-signals)
+    - [Amazing atoms](#amazing-atoms)
     - [Dealing with async data](#dealing-with-async-data)
     - [Selective update with Slots](#selective-update-with-slots)
     - [Element directive](#element-directive)
@@ -12,7 +12,7 @@
     - [Performance Test](#performance-test)
   - [Caveats](#caveats)
     - [Do not destruct props object](#do-not-destruct-props-object)
-    - [Taking snapshot of signal](#taking-snapshot-of-signal)
+    - [Taking snapshot of atom](#taking-snapshot-of-atom)
   - [API reference](#api-reference)
 
 # `Rativ`
@@ -137,33 +137,33 @@ const ChildComponent = stable((props) => {
 });
 ```
 
-### Amazing signals
+### Amazing atoms
 
-Rativ provides signal logic, it is similar to a store or pub/sub logic. You can store data with signal and receive updates everywhere. You can use signal locally or globally, it depends on kind of your data
+Rativ provides atom logic, it is similar to a store or pub/sub logic. You can store data with atom and receive updates everywhere. You can use atom locally or globally, it depends on kind of your data
 
 ```js
 import { singal, stable } from "rativ";
 
-// use signal globally
-const themeSignal = signal("light");
+// use atom globally
+const themeAtom = atom("light");
 
 const ThemeSwitcher = stable(() => {
   const changeTheme = () =>
-    themeSignal.set((prev) => (prev === "dark" ? "light" : "dark"));
+    themeAtom.set((prev) => (prev === "dark" ? "light" : "dark"));
 
-  // return unstable part, that will re-render evertime themeSignal updated
-  return () => <button onClick={changeTheme}>{themeSignal.get()}</button>;
+  // return unstable part, that will re-render evertime themeAtom updated
+  return () => <button onClick={changeTheme}>{themeAtom.get()}</button>;
 });
 
 const Counter = stable(() => {
-  // use signal locally
-  const countSignal = signal(0);
-  const increment = () => countSignal.set((prev) => prev + 1);
+  // use atom locally
+  const countAtom = atom(0);
+  const increment = () => countAtom.set((prev) => prev + 1);
 
-  // this unstable part will re-render when countSignal or themeSignal updated
+  // this unstable part will re-render when countAtom or themeAtom updated
   return () => {
-    // receive data from global signal
-    const theme = themeSignal.get();
+    // receive data from global atom
+    const theme = themeAtom.get();
 
     const style =
       theme === "dark"
@@ -172,7 +172,7 @@ const Counter = stable(() => {
 
     return (
       <div style={style}>
-        <h1>{countSignal.get()}</h1>
+        <h1>{countAtom.get()}</h1>
         <button onClick={increment}>Increment</button>
       </div>
     );
@@ -180,28 +180,28 @@ const Counter = stable(() => {
 });
 ```
 
-There are 3 kinds of signal: computed, emittable, and updatable signals
+There are 3 kinds of atom: computed, emittable, and updatable atoms
 
 ```js
-import { task, signal } from "rative";
-// normal signal, you can update it by using set() function or assign new value to countSignal.state
-const countSignal = signal(0);
-const factorSignal = signal(1);
+import { task, atom } from "rative";
+// normal atom, you can update it by using set() function or assign new value to countAtom.state
+const countAtom = atom(0);
+const factorAtom = atom(1);
 
-// contruct computed signal. The computed signal retrieves the computed function, this function will be called every time its dependency signals are updated
-// in this case, it depends on countSignal and factorSignal
-const bigCountSignal = signal(() => {
-  return countSignal.get() * factorSignal.get();
+// contruct computed atom. The computed atom retrieves the computed function, this function will be called every time its dependency atoms are updated
+// in this case, it depends on countAtom and factorAtom
+const bigCountAtom = atom(() => {
+  return countAtom.get() * factorAtom.get();
 });
-// you can update the computed signal, but you must be aware that when its dependency signals are changed, it receives a new value from a computed function
-const accessTokenSignal = signal("USER_ACCESS_TOKEN");
+// you can update the computed atom, but you must be aware that when its dependency atoms are changed, it receives a new value from a computed function
+const accessTokenAtom = atom("USER_ACCESS_TOKEN");
 
 const getUserProfile = (token) =>
   fetch("API_URL", { headers: { authorization: token } }).then((res) =>
     res.json()
   );
 
-const userProfileSignal = signal(() => {
+const userProfileAtom = atom(() => {
   // define tasks, the task runs once
   // the task uses to handle async call or heavy computation
   const getUserProfileTask = task(getUserProfile);
@@ -211,7 +211,7 @@ const userProfileSignal = signal(() => {
   // DO NOT DO THIS
   const delayTask = task(delay); // delayTask(10); delayTask(20);
 
-  const accessToken = accessTokenSignal.get();
+  const accessToken = accessTokenAtom.get();
   if (!accessToken) return { name: "Anonymous" };
   // no await needed
   const profile = getUserProfileTask(accessToken);
@@ -220,35 +220,35 @@ const userProfileSignal = signal(() => {
 
 const updateEmail = async (email) => {
   // call API to update profile email
-  await updateEmail(userProfileSignal.get().id, email);
-  // update signal state to make sure all UI are updated as well
-  userProfileSignal.set((prev) => ({
+  await updateEmail(userProfileAtom.get().id, email);
+  // update atom state to make sure all UI are updated as well
+  userProfileAtom.set((prev) => ({
     ...prev,
     email,
   }));
 };
 
 const logout = () => {
-  // after clearing access token, userProfileSignal will re-compute and its stable will be { name: "Anonymous" }
-  accessTokenSignal.set("");
+  // after clearing access token, userProfileAtom will re-compute and its stable will be { name: "Anonymous" }
+  accessTokenAtom.set("");
 };
 
-// construct emittable signal, the emittable signal retrieves a reducer (yep, it is like Redux reducer)
-const counterSignal = signal(0, (state, action) => {
+// construct emittable atom, the emittable atom retrieves a reducer (yep, it is like Redux reducer)
+const counterAtom = atom(0, (state, action) => {
   if (action === "increment") return state + 1;
   if (action === "decrement") return state - 1;
   return state;
 });
 
-counterSignal.emit("increment");
-counterSignal.emit("decrement");
+counterAtom.emit("increment");
+counterAtom.emit("decrement");
 ```
 
-To handle signal changes, you can use `watch` function. A `watch` function retrieves changeSelector and options
+To handle atom changes, you can use `watch` function. A `watch` function retrieves changeSelector and options
 
 ```js
-const a = signal(1);
-const b = signal(2);
+const a = atom(1);
+const b = atom(2);
 let sum: number;
 
 // when result of a plus b is changed, the watch callback will be called
@@ -259,7 +259,7 @@ watch(
   }
 );
 
-// OR we can pass only the watching change function, the function will be called immediately after watching starts and whenever the signals that it depends on changed
+// OR we can pass only the watching change function, the function will be called immediately after watching starts and whenever the atoms that it depends on changed
 watch(() => {
   sum = a.get() + b.get();
 });
@@ -271,10 +271,10 @@ a.state++;
 
 ### Dealing with async data
 
-Signal can handle async with ease
+Atom can handle async with ease
 
 ```js
-const user = signal(
+const user = atom(
   fetch("https://jsonplaceholder.typicode.com/users/1").then((res) =>
     res.json()
   )
@@ -310,7 +310,7 @@ console.log(user.state);
 }
 */
 
-// assigning promise object to signal
+// assigning promise object to atom
 user.set(
   fetch("https://jsonplaceholder.typicode.com/users/1").then((res) =>
     res.json()
@@ -327,13 +327,13 @@ user.set(async (prev) => {
 Async counter example
 
 ```js
-import { delay, signal, slot } from "rativ";
+import { delay, atom, slot } from "rativ";
 
-const count = signal(0);
+const count = atom(0);
 const increment = () => count.set((prev) => delay(1000).then(() => prev + 1));
 
 const CounterWithoutSlot = stable(() => {
-  // a promise object will be thrown if trying access state of processing signal
+  // a promise object will be thrown if trying access state of processing atom
   // Suspense will handle a promise object and show fallback
   return () => (
     // unstable part
@@ -367,10 +367,10 @@ const App = () => {
 Sometimes you need some selective parts of the component re-render and keep other parts are stable, you can achieve that goal with slots. Slot can be used with any component type (normal React component and stable component)
 
 ```js
-const theme = signal("dark");
+const theme = atom("dark");
 
 const Counter = stable(() => {
-  const count = signal(0);
+  const count = atom(0);
 
   // we returns React node instead of unstable part, that means the button does not re-render any more
   return (
@@ -383,7 +383,7 @@ const Counter = stable(() => {
         }
       </button>
       Theme: {
-        // slot can be used with local/global signals
+        // slot can be used with local/global atoms
         slot(theme)
       }
     </>
@@ -404,7 +404,7 @@ const DataView = () => {
 Slot can work with local/global mode
 
 ```js
-const theme = signal("dark");
+const theme = atom("dark");
 // better performance than local slot
 const themeSlot = slot(theme);
 
@@ -438,7 +438,7 @@ const clickOutside = (onClick) => {
 };
 
 const Modal = stable(() => {
-  const show = signal(true);
+  const show = atom(true);
   const showModal = () => show.set(true);
   const hideModal = () => show.set(false);
   const modalRef = directive(clickOutside(hideModal)); // it also support multiple directives directive([dir1, dir2, dir3, ...])
@@ -458,12 +458,12 @@ const Modal = stable(() => {
 
 ### Mutation helpers
 
-Rativ provides a slot of mutation helpers, that helps you to mutate signal state with ease, chaining update
+Rativ provides a slot of mutation helpers, that helps you to mutate atom state with ease, chaining update
 
 ```js
 import { sort, prop, item, push, add, toggle, push } from "rative/mutation";
 
-const complexData = signal({
+const complexData = atom({
   userCount: 1,
   token: "",
   todos: [
@@ -528,14 +528,14 @@ const GreetingButton = stable(({ message }) => {
 });
 ```
 
-### Taking snapshot of signal
+### Taking snapshot of atom
 
-Rativ signal can create and revert snapshot with ease. The signal snapshot is useful for writing unit testing
+Rativ atom can create and revert snapshot with ease. The atom snapshot is useful for writing unit testing
 
 ```js
-import { snapshot, signal } from "rativ";
+import { snapshot, atom } from "rativ";
 
-const count = signal(0);
+const count = atom(0);
 count.state++; // count = 1
 // create a snapshot from current state
 const revertCount1 = count.snapshot();
@@ -549,15 +549,15 @@ count.state; // count = 0
 reverCount1();
 count.state; // count = 2
 
-// create snapshot for multiple signals
-const revertAll = snapshot([signal1, signal2] /*, reset  */);
+// create snapshot for multiple atoms
+const revertAll = snapshot([atom1, atom2] /*, reset  */);
 
-// execute the callback with new snapshots (from current state) of signal1 and signal2
-// after callback done, the input signals are reverted automatically
-snapshot([signal1, signal2], callback);
+// execute the callback with new snapshots (from current state) of atom1 and atom2
+// after callback done, the input atoms are reverted automatically
+snapshot([atom1, atom2], callback);
 
-// execute the callback with new snapshots (from initial state) of signal1 and signal2
-snapshot([signal1, signal2], reset, callback);
+// execute the callback with new snapshots (from initial state) of atom1 and atom2
+snapshot([atom1, atom2], reset, callback);
 ```
 
 ## API reference

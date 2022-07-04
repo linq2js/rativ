@@ -3,8 +3,8 @@ import { act, fireEvent, render } from "@testing-library/react";
 import {
   defaultProps,
   delay,
-  Signal,
-  signal,
+  Atom,
+  atom,
   slot,
   stable,
   task,
@@ -22,7 +22,7 @@ test("default props", () => {
 
 test("counter", () => {
   const Component = stable(() => {
-    const count = signal(0);
+    const count = atom(0);
     const increment = () => count.set((prev) => prev + 1);
     return () => (
       <button data-testid="output" onClick={increment}>
@@ -36,11 +36,11 @@ test("counter", () => {
   expect(getByTestId("output").textContent).toBe("1");
 });
 
-test("dispose local signals", () => {
-  const globalSignal = signal(1);
-  let localSignal: Signal<number> | undefined;
+test("dispose local atoms", () => {
+  const globalSignal = atom(1);
+  let localSignal: Atom<number> | undefined;
   const Component = stable(() => {
-    localSignal = signal(() => globalSignal.get() * 2);
+    localSignal = atom(() => globalSignal.get() * 2);
     return () => <div data-testid="output">{localSignal?.get()}</div>;
   });
   const { getByTestId, unmount } = render(<Component />);
@@ -57,7 +57,7 @@ test("dispose local signals", () => {
 });
 
 test("suspense", async () => {
-  const loadDataSignal = signal(() => {
+  const loadDataSignal = atom(() => {
     const delayTask = task(() => delay(10));
     delayTask();
     return 10;
@@ -77,13 +77,13 @@ test("suspense", async () => {
 
 test("rerender", async () => {
   let updateCount = 0;
-  const count = signal(() => {
+  const count = atom(() => {
     const delayTask = task(delay);
     delayTask(10);
     return 100;
   });
-  const factor = signal(1);
-  const result = signal(() => count.get() * factor.get());
+  const factor = atom(1);
+  const result = atom(() => count.get() * factor.get());
   result.on(() => {
     updateCount++;
   });

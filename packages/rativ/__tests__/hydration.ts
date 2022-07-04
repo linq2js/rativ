@@ -1,5 +1,5 @@
 import { hydrate } from "../lib/hydration";
-import { delay, signal } from "../lib/main";
+import { delay, atom } from "../lib/main";
 
 test("hydrate: sync", () => {
   let onLoadCalls = 0;
@@ -9,7 +9,7 @@ test("hydrate: sync", () => {
     onLoad: () => onLoadCalls++,
     onSave: () => onSaveCalls++,
   });
-  const count = signal(0, hydration("count"));
+  const count = atom(0, hydration("count"));
   expect(count.state).toBe(1);
   expect(onLoadCalls).toBe(1);
   expect(onSaveCalls).toBe(0);
@@ -19,8 +19,8 @@ test("hydrate: sync", () => {
 
 test("dehydrate: async", async () => {
   const hydration = hydrate();
-  const count1 = signal(delay(10, 5), hydration("count1"));
-  const count2 = signal(delay(5, 3), hydration("count2"));
+  const count1 = atom(delay(10, 5), hydration("count1"));
+  const count2 = atom(delay(5, 3), hydration("count2"));
   const data = await hydration.dehydrate();
   expect(count1.state).toBe(5);
   expect(count2.state).toBe(3);
