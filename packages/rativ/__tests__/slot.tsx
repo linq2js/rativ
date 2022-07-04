@@ -2,7 +2,7 @@ import React from "react";
 import { atom, slot, stable } from "../lib/main";
 import { act, fireEvent, render } from "@testing-library/react";
 
-test("slot with signal", () => {
+test("slot with atom", () => {
   let renderCount = 0;
   const OtherComponent = () => {
     renderCount++;

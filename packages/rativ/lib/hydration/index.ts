@@ -1,13 +1,13 @@
 export interface HydrateOptions {
-  data?: [unknown, unknown][];
+  state?: [unknown, unknown][];
   onLoad?: (key: any) => void;
-  onSave?: (key: any, data: any) => void;
+  onSave?: (key: any, state: any) => void;
 }
 
-export const hydrate = ({ data, onLoad, onSave }: HydrateOptions = {}) => {
-  let hydratedData = new Map<any, any>(data ?? []);
-  let allDataReady: Promise<void> | undefined;
-  let dataReadyResolve: VoidFunction | undefined;
+export const hydrate = ({ state, onLoad, onSave }: HydrateOptions = {}) => {
+  let hydratedState = new Map<any, any>(state ?? []);
+  let allStateReady: Promise<void> | undefined;
+  let stateReadyResolve: VoidFunction | undefined;
   let dehydrated = false;
   const pending = new Set<unknown>();
 
@@ -16,30 +16,30 @@ export const hydrate = ({ data, onLoad, onSave }: HydrateOptions = {}) => {
    * @returns
    */
   const dehydrate = async () => {
-    await allDataReady;
-    return Array.from(hydratedData.entries());
+    await allStateReady;
+    return Array.from(hydratedState.entries());
   };
 
   return Object.assign(
     (key: unknown) => {
       pending.add(key);
-      allDataReady = new Promise((resolve) => {
-        dataReadyResolve = resolve;
+      allStateReady = new Promise((resolve) => {
+        stateReadyResolve = resolve;
       });
       return {
         load() {
           onLoad?.(key);
-          return hydratedData.get(key);
+          return hydratedState.get(key);
         },
-        save(data: any) {
+        save(state: any) {
           pending.delete(key);
-          hydratedData.set(key, { data });
+          hydratedState.set(key, { state });
           if (!pending.size) {
             dehydrated = true;
-            dataReadyResolve?.();
+            stateReadyResolve?.();
           }
           if (dehydrated) {
-            onSave?.(key, data);
+            onSave?.(key, state);
           }
         },
       };

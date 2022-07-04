@@ -37,27 +37,27 @@ test("counter", () => {
 });
 
 test("dispose local atoms", () => {
-  const globalSignal = atom(1);
-  let localSignal: Atom<number> | undefined;
+  const globalAtom = atom(1);
+  let localAtom: Atom<number> | undefined;
   const Component = stable(() => {
-    localSignal = atom(() => globalSignal.get() * 2);
-    return () => <div data-testid="output">{localSignal?.get()}</div>;
+    localAtom = atom(() => globalAtom.get() * 2);
+    return () => <div data-testid="output">{localAtom?.get()}</div>;
   });
   const { getByTestId, unmount } = render(<Component />);
   expect(getByTestId("output").textContent).toBe("2");
   act(() => {
-    globalSignal.state++;
+    globalAtom.state++;
   });
   expect(getByTestId("output").textContent).toBe("4");
   unmount();
-  expect(localSignal?.state).toBe(4);
-  // try to change the global signal and make sure the local signal is not affected
-  globalSignal.state++;
-  expect(localSignal?.state).toBe(4);
+  expect(localAtom?.state).toBe(4);
+  // try to change the global atom and make sure the local atom is not affected
+  globalAtom.state++;
+  expect(localAtom?.state).toBe(4);
 });
 
 test("suspense", async () => {
-  const loadDataSignal = atom(() => {
+  const loadDataAtom = atom(() => {
     const delayTask = task(() => delay(10));
     delayTask();
     return 10;
@@ -65,7 +65,7 @@ test("suspense", async () => {
   const Component = stable(() => {
     return (
       <Suspense fallback={<div data-testid="loading"></div>}>
-        <div data-testid="output">{slot(loadDataSignal)}</div>
+        <div data-testid="output">{slot(loadDataAtom)}</div>
       </Suspense>
     );
   });

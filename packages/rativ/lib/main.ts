@@ -11,6 +11,7 @@ import {
   ReactNode,
   RefAttributes,
   RefObject,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -31,43 +32,122 @@ export type Refs<T extends Record<string, any> = {}, F = any> = {
 };
 
 export type Atom<T = any> = {
-  readonly name: string;
+  /**
+   * name of atom
+   */
+  readonly name: string | undefined;
+  /**
+   * get loading status of the atom
+   */
   readonly loading: boolean;
+  /**
+   * get current error of the atom
+   */
   readonly error: any;
+  /**
+   * get current task of the atom
+   */
   readonly task: Promise<T> | undefined;
+  /**
+   * listen atom state changing event
+   * @param listener
+   */
   on(listener: Listener<T>): VoidFunction;
-  on(type: "error", listener: Listener<void>): VoidFunction;
-  on(type: "loading", listener: Listener<void>): VoidFunction;
+  /**
+   * listen atom status changing event
+   * @param type
+   * @param listener
+   */
+  on(type: "status", listener: Listener<void>): VoidFunction;
+  /**
+   * get current state of the atom
+   */
   get(): T;
+  /**
+   * get result of the selector, the selector retrieves current state of the atom
+   * @param selector
+   */
+  get<R>(selector: (state: T) => R): R;
+  /**
+   * reset atom state
+   */
   reset(): void;
+  /**
+   * abort the task of the atom if it is processing
+   */
   abort(): void;
+  /**
+   * create a snapshot of the atom
+   * @param reset
+   */
   snapshot(reset?: boolean): VoidFunction;
+  /**
+   * get current state of the atom
+   */
   readonly state: T;
 };
 
 export type UpdatableAtom<T = any> = Atom<T> & {
+  /**
+   * get or set current state of the atom
+   */
   state: T;
-  set(...mutation: Mutation<T>[]): UpdatableAtom<T>;
+  /**
+   * update current state of the atom by using specfied mutations
+   * @param mutations
+   */
+  set(...mutations: Mutation<T>[]): UpdatableAtom<T>;
+  /**
+   * update current state of the atom
+   * @param value
+   */
   set(
     value: ((prev: T, context: Context) => T | Promise<T>) | T | Promise<T>
   ): void;
 };
 
 export type Context = {
+  /**
+   * AbortController signal
+   */
   readonly signal: AbortController["signal"] | undefined;
+  /**
+   * is aborted
+   */
   readonly aborted: boolean;
+  /**
+   *  abort the context
+   */
   abort(): void;
 };
 
 export type EmittableAtom<T = any, A = void> = Atom<T> & {
+  /**
+   * emit an action and atom reducer will handle the action
+   * @param action
+   */
   emit(action: A): EmittableAtom<T, A>;
+  /**
+   * listen action emitting event
+   * @param type
+   * @param listener
+   */
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
 };
 
 export type AtomOptions = {
+  /**
+   * name of atom, for debugging purpose
+   */
   name?: string;
-  load?: () => { data: any } | undefined;
-  save?: (data: any) => void;
+  /**
+   * this function will be called when initializing atom
+   */
+  load?: () => { state: any } | undefined;
+  /**
+   * this function will be called when atom state changed
+   */
+  save?: (state: any) => void;
   onChange?: VoidFunction;
   onError?: (error: any) => void;
   onLoading?: VoidFunction;
@@ -81,13 +161,22 @@ export type EmittableOptions<A = any> = AtomOptions & {
 export type ComputedAtom<T> = UpdatableAtom<T>;
 
 export type CreateAtom = {
+  /**
+   * create computed atom
+   */
   <T>(
     computeFn: (context: Context) => T,
     options?: AtomOptions
   ): ComputedAtom<T>;
 
+  /**
+   * create updatable atom
+   */
   <T>(initialState: Promise<T> | T, options?: AtomOptions): UpdatableAtom<T>;
 
+  /**
+   * create amittable atom
+   */
   <T, A = void>(
     initialState: T,
     reducer: (state: NoInfer<T>, action: A, context: Context) => T,
@@ -96,7 +185,7 @@ export type CreateAtom = {
 };
 
 export type Wait = {
-  <T>(singal: Atom<T>): T;
+  <T>(atom: Atom<T>): T;
   <S>(awaitables: S): {
     [key in keyof S]: S[key] extends Atom<infer T>
       ? T
@@ -112,11 +201,25 @@ export type CreateSlot = {
 };
 
 export type CallbackGroup = {
+  /**
+   * add callback into the group and return `remove` function
+   * @param callback
+   */
   add(callback: Function): VoidFunction;
+  /**
+   * call all callbacks with specified args
+   * @param args
+   */
   call(...args: any[]): void;
+  /**
+   * remove all callbacks
+   */
   clear(): void;
 };
 
+/**
+ *
+ */
 export interface ComponentBuilder<C, O, P = O> {
   /**
    * create component prop with specified valid values
@@ -391,7 +494,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   let initialState: unknown;
   let reducer: Function | undefined;
   let options: EmittableOptions;
-  let loadedState: any;
+  let loadedState: { state: any } | undefined;
 
   // atom(initialState, reducer, options)
   if (typeof args[1] === "function") {
@@ -501,7 +604,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     }
   };
 
-  const get = () => {
+  const get = (selector?: Function) => {
     const scopeType = currentScope?.type;
     if (
       scopeType === "component" ||
@@ -516,6 +619,9 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       }
     }
     handleDependency(allListeners.state.add);
+
+    if (typeof selector === "function") return selector(storage.state);
+
     return storage.state;
   };
 
@@ -702,7 +808,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
     onInit.add(() => {
       if (loadedState) {
-        storage.state = loadedState.data;
+        storage.state = loadedState.state;
       } else {
         invalidateState();
       }
@@ -758,7 +864,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       };
       Object.assign(atom, emittableAtom);
       if (loadedState) {
-        storage.state = loadedState.data;
+        storage.state = loadedState.state;
       }
       if (options?.initAction) {
         emittableAtom.emit(options.initAction);
@@ -775,7 +881,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
       onInit.add(() => {
         if (loadedState) {
-          storage.state = loadedState.data;
+          storage.state = loadedState.state;
         } else if (isPromiseLike(storage.state)) {
           const asyncState = storage.state;
           storage.state = undefined;
@@ -904,13 +1010,21 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
   // wrap render function to functional component to get advantages of hooks
   const Inner = memo((props: { __render: (forceUpdate: Function) => any }) => {
     const setState = useState()[1];
+    const renderingRef = useRef(true);
+    renderingRef.current = true;
     // we use nextRender value to prevent calling forceUpdate multiple times
     // nextRender value will be changed only when the component is actual re-rendered
     const nextRenderRef = useRef<any>();
-    const forceUpdate = useState(
-      () => () => setState(nextRenderRef.current)
-    )[0];
+    const forceUpdate = useState(() => () => {
+      if (renderingRef.current) return;
+      setState(nextRenderRef.current);
+    })[0];
     nextRenderRef.current = {};
+
+    useLayoutEffect(() => {
+      renderingRef.current = false;
+    });
+
     return props.__render(forceUpdate);
   });
 

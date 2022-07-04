@@ -5,7 +5,7 @@ test("hydrate: sync", () => {
   let onLoadCalls = 0;
   let onSaveCalls = 0;
   const hydration = hydrate({
-    data: [["count", { data: 1 }]],
+    state: [["count", { state: 1 }]],
     onLoad: () => onLoadCalls++,
     onSave: () => onSaveCalls++,
   });
@@ -25,6 +25,6 @@ test("dehydrate: async", async () => {
   expect(count1.state).toBe(5);
   expect(count2.state).toBe(3);
   const map = new Map(data);
-  expect(map.get("count1")).toEqual({ data: 5 });
-  expect(map.get("count2")).toEqual({ data: 3 });
+  expect(map.get("count1")).toEqual({ state: 5 });
+  expect(map.get("count2")).toEqual({ state: 3 });
 });

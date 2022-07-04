@@ -28,7 +28,7 @@
     "render",
     "stable",
     "reactive",
-    "signal",
+    "atom",
     "hook",
     "object",
     "immutable",
