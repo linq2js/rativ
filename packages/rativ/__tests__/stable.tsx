@@ -7,7 +7,7 @@ import {
   atom,
   slot,
   stable,
-  task,
+  read,
 } from "../lib/main";
 
 test("default props", () => {
@@ -57,9 +57,8 @@ test("dispose local atoms", () => {
 });
 
 test("suspense", async () => {
-  const loadDataAtom = atom(() => {
-    const delayTask = task(() => delay(10));
-    delayTask();
+  const loadDataAtom = atom(async () => {
+    await delay(10);
     return 10;
   });
   const Component = stable(() => {
@@ -77,13 +76,14 @@ test("suspense", async () => {
 
 test("rerender", async () => {
   let updateCount = 0;
-  const count = atom(() => {
-    const delayTask = task(delay);
-    delayTask(10);
+  const count = atom(async () => {
+    await delay(10);
     return 100;
   });
   const factor = atom(1);
-  const result = atom(() => count.get() * factor.get());
+  const result = atom(async () => {
+    return (await read(count)) * (await read(factor));
+  });
   result.on(() => {
     updateCount++;
   });
@@ -102,10 +102,12 @@ test("rerender", async () => {
   act(() => {
     factor.state++;
   });
+  await act(() => delay(20));
   expect(getByTestId("output").textContent).toEqual("200");
   act(() => {
     factor.state++;
   });
+  await act(() => delay(20));
   expect(getByTestId("output").textContent).toEqual("300");
   expect(updateCount).toBe(4);
 });

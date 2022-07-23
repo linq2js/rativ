@@ -18,6 +18,7 @@ import {
 import { mutate, Mutation } from "./mutation";
 import { createCallbackGroup } from "./util/createCallbackGroup";
 import { isPromiseLike } from "./util/isPromiseLike";
+import { delay } from "./util/delay";
 
 export type { Mutation };
 
@@ -167,7 +168,7 @@ export type CreateAtom = {
    * create computed atom
    */
   <T>(
-    computeFn: (context: Context) => T,
+    computeFn: (context: Context) => T | Promise<T>,
     options?: AtomOptions
   ): ComputedAtom<T>;
 
@@ -181,7 +182,7 @@ export type CreateAtom = {
    */
   <T, A = void>(
     initialState: T,
-    reducer: (state: NoInfer<T>, action: A, context: Context) => T,
+    reducer: (state: NoInfer<T>, action: A, context: Context) => T | Promise<T>,
     options?: EmittableOptions<A>
   ): EmittableAtom<T, A>;
 };
@@ -359,7 +360,6 @@ export type Scope = {
   type?:
     | "emittable"
     | "computed"
-    | "task"
     | "component"
     | "updatable"
     /**
@@ -371,6 +371,7 @@ export type Scope = {
   addEffect?: (effect: Effect) => void;
   context?: InternalContext;
   onDone?: VoidFunction;
+  onCleanup?: (listener: VoidFunction) => VoidFunction;
 };
 
 export type Task<T, A extends any[]> = {
@@ -545,11 +546,11 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       allListeners.status.call(storage.error);
     }
 
-    // should notify state listeners if status is changed
-    if (stateChanged || statusChanged) {
+    if (stateChanged) {
       storage.changeToken = {};
       allListeners.state.call(storage.state);
     }
+
     if (stateChanged) {
       save?.(storage.state);
     }
@@ -557,11 +558,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
   const get = (selector?: Function) => {
     const scopeType = currentScope?.type;
-    if (
-      scopeType === "component" ||
-      scopeType === "emittable" ||
-      scopeType === "computed"
-    ) {
+    if (scopeType === "component") {
       if (storage.loading) {
         throw storage.task;
       }
@@ -708,9 +705,11 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     Object.defineProperty(atom, "state", { get, set });
 
     const computeState = storage.state;
+    const onCleanup = createCallbackGroup();
     storage.state = undefined;
 
     const invalidateState = () => {
+      onCleanup.call();
       const context = createContext();
       const execute = () => {
         storage.lastContext = context;
@@ -723,25 +722,14 @@ const createAtom: CreateAtom = (...args: any[]): any => {
             storage.dependencies,
             // invalidate state when dependency atoms are changed
             invalidateState,
-            { parent: key, context, type: "computed" }
+            {
+              parent: key,
+              context,
+              type: "computed",
+              onCleanup: onCleanup.add,
+            }
           );
         } catch (ex) {
-          if (isPromiseLike(ex)) {
-            let token: any;
-            storage.task = ex.then(
-              () => {
-                if (token !== storage.changeToken) return;
-                execute();
-              },
-              (reason) => {
-                if (token !== storage.changeToken) return;
-                changeStatus(false, reason, storage.state);
-              }
-            );
-            changeStatus(true, undefined, storage.state);
-            token = storage.changeToken;
-            return;
-          }
           changeStatus(false, ex, storage.state);
         }
       };
@@ -769,11 +757,13 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     if (reducer) {
       // is emittable atom, it has only state getter, and emit method
       Object.defineProperty(atom, "state", { get });
+      const onCleanup = createCallbackGroup();
       const emittableAtom = {
         emit(action: any) {
           allListeners.emit.call(storage.state, action);
           const context = (storage.lastContext = createContext());
           const execute = () => {
+            onCleanup.call();
             try {
               scopeOfWork(
                 () => {
@@ -781,26 +771,9 @@ const createAtom: CreateAtom = (...args: any[]): any => {
                   const nextState = reducer!(storage.state, action, context);
                   set(nextState);
                 },
-                { type: "emittable", context }
+                { type: "emittable", context, onCleanup: onCleanup.add }
               );
             } catch (ex) {
-              // run reducer again dependency atoms are in progress
-              if (isPromiseLike(ex)) {
-                let token: any;
-                storage.task = ex.then(
-                  () => {
-                    if (token !== storage.changeToken) return;
-                    execute();
-                  },
-                  (reason) => {
-                    if (token !== storage.changeToken) return;
-                    changeStatus(false, reason, storage.state);
-                  }
-                );
-                changeStatus(true, undefined, storage.state);
-                token = storage.changeToken;
-                return atom;
-              }
               changeStatus(false, ex, storage.state);
             }
 
@@ -845,6 +818,36 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   onInit.call();
 
   return atom;
+};
+
+export type Read = {
+  <T>(atom: Atom<T>): Promise<T>;
+  <T extends { [key: number]: Atom<any> }>(atoms: T): Promise<{
+    [key in keyof T]: T[key] extends Atom<infer V> ? V : never;
+  }>;
+};
+
+export const read: Read = (inputs: any): any => {
+  if (Array.isArray(inputs)) {
+    return Promise.all(inputs.map(read));
+  }
+  if (!inputs.loading) return Promise.resolve(inputs.state);
+
+  const cleanup = createCallbackGroup();
+  if (currentScope?.onCleanup) {
+    cleanup.add(currentScope.onCleanup(cleanup.call));
+  }
+
+  return new Promise((resolve, reject) => {
+    cleanup.add(
+      inputs.on("status", () => {
+        if (inputs.loading) return;
+        cleanup.call();
+        if (inputs.error) return reject(inputs.error);
+        resolve(inputs.state);
+      })
+    );
+  });
 };
 
 const createStableFunction = (
@@ -1130,221 +1133,6 @@ export const isAtom = <T>(value: any): value is Atom<T> => {
   );
 };
 
-/**
- * if `atoms` is an array, wait() works like Promise.all() unless it works like Promise.race()
- * @param awaitables
- * @param autoAbort
- * @returns
- */
-export const wait: Wait = (awaitables, autoAbort?: boolean) => {
-  if (!currentScope) {
-    throw new Error("Cannot use wait() helper outside atom");
-  }
-
-  if (isAtom(awaitables)) {
-    if (awaitables.task) throw awaitables.task;
-    if (awaitables.error) throw awaitables.error;
-    return awaitables.state;
-  }
-
-  const promises: Promise<any>[] = [];
-  const pending: Atom[] = [];
-
-  // wait(awaitables[])
-  if (Array.isArray(awaitables)) {
-    const results: any[] = [];
-    awaitables.forEach((awaitable, index) => {
-      if (isAtom(awaitable)) {
-        if (awaitable.error) {
-          throw awaitable.error;
-        }
-
-        if (awaitable.task) {
-          promises.push(awaitable.task);
-          pending.push(awaitable);
-        } else {
-          results[index] = awaitable.state;
-        }
-      }
-      // is runner
-      else if (typeof awaitable === "function") {
-        try {
-          const result = awaitable();
-          results[index] = result;
-        } catch (ex) {
-          if (isPromiseLike(ex)) {
-            promises.push(ex);
-          }
-          throw ex;
-        }
-      }
-    });
-    if (promises.length)
-      throw Promise.all(promises).finally(
-        () => autoAbort && pending.forEach((atom) => atom.abort())
-      );
-    return results;
-  }
-  const results: Record<string, any> = {};
-  let hasResult = false;
-  Object.entries(awaitables).some(([key, awaitable]: [string, any]) => {
-    if (isAtom(awaitable)) {
-      if (awaitable.error) {
-        throw awaitable.error;
-      }
-
-      if (awaitable.task) {
-        promises.push(awaitable.task);
-        pending.push(awaitable);
-        return false;
-      }
-      results[key] = awaitable.state;
-      hasResult = true;
-    }
-    // is runner
-    else if (typeof awaitable === "function") {
-      try {
-        const result = awaitable();
-        results[key] = result;
-        hasResult = true;
-      } catch (ex) {
-        if (isPromiseLike(ex)) {
-          promises.push(ex);
-          pending.push(awaitable);
-          return false;
-        }
-        throw ex;
-      }
-    }
-    return true;
-  });
-  if (!hasResult && promises.length)
-    throw Promise.race(promises).finally(
-      () => autoAbort && pending.forEach((atom) => atom.abort?.())
-    );
-  return results;
-};
-
-/**
- * create a task that runs once
- * @param fn
- * @param waitNone
- * @returns
- */
-export const task = <T, A extends any[]>(
-  fn: (...args: A) => T | Promise<T>,
-  waitNone?: boolean
-): Task<T, A> => {
-  return scopeOfWork(
-    ({ context }) => {
-      if (!context) {
-        throw new Error("task() helper cannot be called outside atom");
-      }
-
-      let task = context.taskList[context.taskIndex];
-      if (!task) {
-        let status: "idle" | "error" | "loading" | "success" = "idle";
-        let data: any;
-        let aborted = false;
-
-        const abort = () => {
-          if (aborted) return;
-          aborted = true;
-        };
-
-        task = Object.assign(
-          (...args: A): T => {
-            if (status === "success") {
-              return data;
-            }
-
-            if (status === "error" || status === "loading") {
-              throw data;
-            }
-
-            return scopeOfWork(
-              () => {
-                try {
-                  const result = fn(...args);
-                  if (isPromiseLike(result) || isAtom(result)) {
-                    throw result;
-                  }
-                  data = result;
-                  status = "success";
-                  return result;
-                } catch (ex) {
-                  if (isAtom(ex)) {
-                    const atom = ex;
-                    if (!atom.task) {
-                      if (!atom.error) {
-                        return atom.state;
-                      }
-                      ex = atom.error;
-                    } else {
-                      ex = new Promise((resolve, reject) => {
-                        atom.task?.finally(() => {
-                          if (atom.error) {
-                            reject(atom.error);
-                          } else {
-                            resolve(atom.state);
-                          }
-                        });
-                      });
-                    }
-                  }
-
-                  if (isPromiseLike(ex)) {
-                    status = "loading";
-                    const promise = ex;
-                    ex = new Promise((resolve, reject) => {
-                      promise.then(
-                        (value) => {
-                          if (context.aborted || aborted) return;
-                          status = "success";
-                          data = value;
-                          resolve(value);
-                        },
-                        (reason) => {
-                          if (context.aborted || aborted) return;
-                          status = "error";
-                          data = reason;
-                          reject(reason);
-                        }
-                      );
-                    });
-                  } else {
-                    status = "error";
-                  }
-
-                  if (status === "loading" && waitNone) {
-                    status = "success";
-                    data = undefined;
-                    return;
-                  }
-                  data = ex;
-                  throw ex;
-                }
-              }, // disable dependent registration
-              { addDependency: undefined }
-            );
-          },
-          {
-            runner(...args: A) {
-              return Object.assign(() => task(...args), { abort });
-            },
-            abort,
-          }
-        );
-        Object.defineProperty(task, "aborted", { get: () => aborted });
-        context.taskList[context.taskIndex] = task;
-        context.taskIndex++;
-      }
-      return task;
-    },
-    { type: "task" }
-  );
-};
-
 export const SlotInner = memo((props: { render: () => any; token: any }) => {
   const rerender = useState<any>()[1];
   const context = useState(() => ({
@@ -1430,9 +1218,6 @@ export const directive = <E = HTMLElement>(
   return ref;
 };
 
-export const delay = <T = void>(ms: number, resolved?: T) =>
-  new Promise<T>((resolve) => setTimeout(resolve, ms, resolved));
-
 export { createAtom as atom, createStableComponent as stable };
 
 export const watch: Watch = (watchFn, options) => {
@@ -1440,6 +1225,7 @@ export const watch: Watch = (watchFn, options) => {
     options = { callback: options };
   }
   const { callback, compare } = options ?? {};
+  const onCleanup = createCallbackGroup();
   let dependencies = new Map<any, Function>();
   let firstTime = true;
   let active = true;
@@ -1447,12 +1233,14 @@ export const watch: Watch = (watchFn, options) => {
 
   const startWatching = () => {
     if (!active) return;
+    onCleanup.call();
     const value = collectDependencies(
       watchFn as unknown as () => unknown,
       dependencies,
       startWatching,
       {
-        type: "task",
+        type: "computed",
+        onCleanup: onCleanup.add,
         addDependency: undefined,
       }
     );
@@ -1701,4 +1489,4 @@ const createAtomFamily = <A extends any[], T = unknown>(
   };
 };
 
-export { createAtomFamily as family };
+export { createAtomFamily as family, delay };

@@ -152,7 +152,7 @@ const ThemeSwitcher = stable(() => {
     themeAtom.set((prev) => (prev === "dark" ? "light" : "dark"));
 
   // return unstable part, that will re-render evertime themeAtom updated
-  return () => <button onClick={changeTheme}>{themeAtom.get()}</button>;
+  return () => <button onClick={changeTheme}>{themeAtom.state}</button>;
 });
 
 const Counter = stable(() => {
@@ -163,7 +163,7 @@ const Counter = stable(() => {
   // this unstable part will re-render when countAtom or themeAtom updated
   return () => {
     // receive data from global atom
-    const theme = themeAtom.get();
+    const theme = themeAtom.state;
 
     const style =
       theme === "dark"
@@ -172,7 +172,7 @@ const Counter = stable(() => {
 
     return (
       <div style={style}>
-        <h1>{countAtom.get()}</h1>
+        <h1>{countAtom.state}</h1>
         <button onClick={increment}>Increment</button>
       </div>
     );
@@ -183,7 +183,7 @@ const Counter = stable(() => {
 There are 3 kinds of atom: computed, emittable, and updatable atoms
 
 ```js
-import { task, atom } from "rative";
+import { atom } from "rative";
 // normal atom, you can update it by using set() function or assign new value to countAtom.state
 const countAtom = atom(0);
 const factorAtom = atom(1);
@@ -191,7 +191,7 @@ const factorAtom = atom(1);
 // contruct computed atom. The computed atom retrieves the computed function, this function will be called every time its dependency atoms are updated
 // in this case, it depends on countAtom and factorAtom
 const bigCountAtom = atom(() => {
-  return countAtom.get() * factorAtom.get();
+  return countAtom.state * factorAtom.state;
 });
 // you can update the computed atom, but you must be aware that when its dependency atoms are changed, it receives a new value from a computed function
 const accessTokenAtom = atom("USER_ACCESS_TOKEN");
@@ -201,26 +201,17 @@ const getUserProfile = (token) =>
     res.json()
   );
 
-const userProfileAtom = atom(() => {
-  // define tasks, the task runs once
-  // the task uses to handle async call or heavy computation
-  const getUserProfileTask = task(getUserProfile);
-  // similar tasks
-  const delayIn10msTask = task(() => delay(10));
-  const delayIn20msTask = task(() => delay(20));
-  // DO NOT DO THIS
-  const delayTask = task(delay); // delayTask(10); delayTask(20);
-
-  const accessToken = accessTokenAtom.get();
+const userProfileAtom = atom(async () => {
+  const accessToken = accessTokenAtom.state;
   if (!accessToken) return { name: "Anonymous" };
   // no await needed
-  const profile = getUserProfileTask(accessToken);
+  const profile = await getUserProfile(accessToken);
   return pofile;
 });
 
 const updateEmail = async (email) => {
   // call API to update profile email
-  await updateEmail(userProfileAtom.get().id, email);
+  await updateEmail(userProfileAtom.state.id, email);
   // update atom state to make sure all UI are updated as well
   userProfileAtom.set((prev) => ({
     ...prev,
@@ -253,7 +244,7 @@ let sum: number;
 
 // when result of a plus b is changed, the watch callback will be called
 watch(
-  () => a.get() + b.get(),
+  () => a.state + b.state,
   (result) => {
     console.log("result:", result);
   }
@@ -261,7 +252,7 @@ watch(
 
 // OR we can pass only the watching change function, the function will be called immediately after watching starts and whenever the atoms that it depends on changed
 watch(() => {
-  sum = a.get() + b.get();
+  sum = a.state + b.state;
 });
 console.log(sum); // CONSOLE: 3
 
@@ -337,7 +328,7 @@ const CounterWithoutSlot = stable(() => {
   // Suspense will handle a promise object and show fallback
   return () => (
     // unstable part
-    <h1 onClick={incrementAsync}>{count.get()}</h1>
+    <h1 onClick={incrementAsync}>{count.state}</h1>
   );
 });
 
@@ -379,7 +370,7 @@ const Counter = stable(() => {
         Counter:
         {
           // we still need display current count value
-          slot(count) // this equipvalent to slot(() => count.get())
+          slot(count) // this equipvalent to slot(() => count.state)
         }
       </button>
       Theme: {
@@ -445,8 +436,8 @@ const Modal = stable(() => {
 
   return () => (
     <>
-      {!show.get() && <button onClick={showModal}>Show modal</button>}
-      {show.get() && (
+      {!show.state && <button onClick={showModal}>Show modal</button>}
+      {show.state && (
         <div className="modal" ref={modalRef}>
           Modal contents
         </div>

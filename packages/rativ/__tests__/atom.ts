@@ -1,4 +1,4 @@
-import { atom, wait, delay } from "../lib/main";
+import { atom, delay, read } from "../lib/main";
 
 test("simple atom", () => {
   const a = atom(0);
@@ -26,7 +26,8 @@ test("sync computed atom", () => {
 test("async computed atom", async () => {
   const a = atom(1);
   const b = atom(2);
-  const sum = atom(() => a.get() + b.get());
+  const sum = atom(async () => (await read(a)) + (await read(b)));
+  await delay();
   expect(sum.state).toBe(3);
   a.set(delay(10, 2));
   expect(sum.loading).toBe(true);
@@ -48,8 +49,8 @@ test("wait all", async () => {
   const b = atom(delay(10, 2));
   expect(a.loading).toBe(true);
   expect(b.loading).toBe(true);
-  const sum = atom(() => {
-    const [av, bv] = wait([a, b]);
+  const sum = atom(async () => {
+    const [av, bv] = await read([a, b]);
     return av + bv;
   });
   expect(sum.loading).toBe(true);
@@ -60,21 +61,6 @@ test("wait all", async () => {
   await delay(15);
   expect(sum.loading).toBe(false);
   expect(sum.state).toBe(3);
-});
-
-test("Wait any", async () => {
-  const a = atom(delay(10, 1));
-  const b = atom(delay(5, 2));
-  expect(a.loading).toBe(true);
-  expect(b.loading).toBe(true);
-  const sum = atom(() => {
-    const result = wait({ a, b });
-    return "a" in result ? "a" : "b";
-  });
-  expect(sum.loading).toBe(true);
-  await delay(8);
-  // b wins
-  expect(sum.state).toBe("b");
 });
 
 test("emittable: sync", () => {
@@ -92,9 +78,10 @@ test("emittable: sync", () => {
 
 test("emittable: async", async () => {
   const step = atom(delay(10, 1));
-  const emittalbe = atom(0, (state, action: "inc" | "dec") => {
-    if (action === "inc") return state + step.get();
-    if (action === "dec") return state - step.get();
+  const emittalbe = atom(0, async (state, action: "inc" | "dec") => {
+    const stepValue = await read(step);
+    if (action === "inc") return state + stepValue;
+    if (action === "dec") return state - stepValue;
     return state;
   });
   expect(emittalbe.state).toBe(0);
@@ -106,6 +93,7 @@ test("emittable: async", async () => {
   expect(step.loading).toBe(false);
   expect(emittalbe.state).toBe(1);
   emittalbe.emit("dec");
+  await delay();
   expect(emittalbe.state).toBe(0);
 });
 

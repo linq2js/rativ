@@ -1,4 +1,4 @@
-import { signal, spawn, delay, Effect } from "./";
+import { signal, spawn, delay, Flow } from "./";
 
 test("signal without payload", () => {
   let count = 0;
@@ -244,7 +244,7 @@ test("all", async () => {
 test("restartable", async () => {
   let count = 0;
   const clicked = signal();
-  const increment: Effect = async ({ delay }) => {
+  const increment: Flow = async ({ delay }) => {
     await delay(10);
     count++;
   };
@@ -265,7 +265,7 @@ test("restartable", async () => {
 test("droppable", async () => {
   let count = 0;
   const clicked = signal();
-  const increment: Effect = async ({ delay }) => {
+  const increment: Flow = async ({ delay }) => {
     await delay(10);
     count++;
   };
@@ -284,7 +284,7 @@ test("droppable", async () => {
 test("sequential", async () => {
   let count = 0;
   const clicked = signal();
-  const increment: Effect = async ({ delay }) => {
+  const increment: Flow = async ({ delay }) => {
     await delay(10);
     count++;
   };

@@ -1,10 +1,11 @@
 import { createCallbackGroup } from "../util/createCallbackGroup";
 import { isPromiseLike } from "../util/isPromiseLike";
+import { delay } from "../util/delay";
 
 export type TaskStatus = "idle" | "running" | "error" | "success" | "cancelled";
 
-export type Effect<A extends any[] = any[], R = any> = (
-  context: EffectContext,
+export type Flow<A extends any[] = any[], R = any> = (
+  context: FlowContext,
   ...args: A
 ) => R | Promise<R>;
 
@@ -35,16 +36,16 @@ export type WaitResult<T> = {
 
 export type SignalList = Signal | (Signal | SignalList)[];
 
-export type EffectContext = Cancellable & {
+export type FlowContext = Cancellable & {
   onCancel(listener: VoidFunction): VoidFunction;
   onDispose(listener: VoidFunction): VoidFunction;
   onError(listener: (error: any) => void): VoidFunction;
   race<T>(awaitables: T): Promise<Partial<WaitResult<T>>>;
   all<T>(awaitables: T): Promise<WaitResult<T>>;
   allSettled<T>(awaitables: T): Promise<WaitResult<T>>;
-  fork<A extends any[], R = void>(effect: Effect<A, R>, ...args: A): Task<R>;
+  fork<A extends any[], R = void>(flow: Flow<A, R>, ...args: A): Task<R>;
 
-  call<A extends any[], R>(effect: Effect<A, R>, ...args: A): R;
+  call<A extends any[], R>(flow: Flow<A, R>, ...args: A): R;
 
   callback<A extends any[]>(fn: (...args: A) => void): (...args: A) => void;
 
@@ -57,71 +58,71 @@ export type EffectContext = Cancellable & {
 
   on<T, A extends any[]>(
     signal: Signal<T>,
-    effect: Effect<[T, ...A]>,
+    flow: Flow<[T, ...A]>,
     ...args: A
   ): Task;
   on<A extends any[]>(
     signals: SignalList,
-    effect: Effect<[any, ...A]>,
+    flow: Flow<[any, ...A]>,
     ...args: A
   ): Task;
 
   debounce<T, A extends any[]>(
     ms: number,
     signal: Signal<T>,
-    effect: Effect<[T, ...A]>,
+    flow: Flow<[T, ...A]>,
     ...args: A
   ): Task;
   debounce<A extends any[]>(
     ms: number,
     signals: SignalList,
-    effect: Effect<[any, ...A]>,
+    flow: Flow<[any, ...A]>,
     ...args: A
   ): Task;
 
   throttle<T, A extends any[]>(
     ms: number,
     signal: Signal<T>,
-    effect: Effect<[T, ...A]>,
+    flow: Flow<[T, ...A]>,
     ...args: A
   ): Task;
   throttle<A extends any[]>(
     ms: number,
     signals: SignalList,
-    effect: Effect<[any, ...A]>,
+    flow: Flow<[any, ...A]>,
     ...args: A
   ): Task;
 
   sequential<T, A extends any[]>(
     signal: Signal<T>,
-    effect: Effect<[T, ...A]>,
+    flow: Flow<[T, ...A]>,
     ...args: A
   ): Task;
   sequential<A extends any[]>(
     signals: SignalList,
-    effect: Effect<[any, ...A]>,
+    flow: Flow<[any, ...A]>,
     ...args: A
   ): Task;
 
   restartable<T, A extends any[]>(
     signal: Signal<T>,
-    effect: Effect<[T, ...A]>,
+    flow: Flow<[T, ...A]>,
     ...args: A
   ): Task;
   restartable<A extends any[]>(
     signals: SignalList,
-    effect: Effect<[any, ...A]>,
+    flow: Flow<[any, ...A]>,
     ...args: A
   ): Task;
 
   droppable<T, A extends any[]>(
     signal: Signal<T>,
-    effect: Effect<[T, ...A]>,
+    flow: Flow<[T, ...A]>,
     ...args: A
   ): Task;
   droppable<A extends any[]>(
     signals: SignalList,
-    effect: Effect<[any, ...A]>,
+    flow: Flow<[any, ...A]>,
     ...args: A
   ): Task;
 
@@ -217,8 +218,8 @@ const createEmittable = <T = void>(): Emittable<T> => {
 };
 
 const createTask = <T = void>(
-  fn: (context: EffectContext) => T | Promise<T>,
-  parentContext?: EffectContext
+  fn: (context: FlowContext) => T | Promise<T>,
+  parentContext?: FlowContext
 ): Task<T> => {
   let status: TaskStatus = "idle";
   let error: any;
@@ -325,28 +326,16 @@ const createTask = <T = void>(
   );
 };
 
-const delay = <T>(ms = 0, value?: T) => {
-  let timer: any;
-  return Object.assign(
-    new Promise<T>((resolve) => (timer = setTimeout(resolve, ms, value))),
-    {
-      cancel() {
-        clearTimeout(timer);
-      },
-    }
-  );
-};
-
 const spawn = <A extends any[] = [], R = any>(
-  effect: Effect<A, R>,
+  flow: Flow<A, R>,
   ...args: A
 ): Task<R> => {
-  const task = createTask((context) => effect(context, ...args));
+  const task = createTask((context) => flow(context, ...args));
   task();
   return task;
 };
 
-const throwError = (context: EffectContext, error: any) => {
+const throwError = (context: FlowContext, error: any) => {
   (context as any).throwError(error);
 };
 
@@ -363,9 +352,9 @@ const forEachSignalList = (
 
 const listen = (
   signals: SignalList,
-  parentContext: EffectContext,
+  parentContext: FlowContext,
   callback: (
-    context: EffectContext,
+    context: FlowContext,
     signal: Signal<any>,
     prevTask: Task<any> | undefined
   ) => void,
@@ -424,7 +413,7 @@ const listen = (
 const createTaskContext = (
   handleError: (error: any) => void,
   handleForkedTask: (task: Task<any>) => void
-): EffectContext => {
+): FlowContext => {
   let disposed = false;
   const onCancel = createCallbackGroup();
   const onDispose = createCallbackGroup();
@@ -494,7 +483,7 @@ const createTaskContext = (
     });
   };
 
-  const context: EffectContext = {
+  const context: FlowContext = {
     ...cancellable,
     onCancel: onCancel.add,
     onDispose: onDispose.add,
@@ -575,50 +564,50 @@ const createTaskContext = (
     allSettled(awaitables) {
       return wait(awaitables, "allSettled");
     },
-    on(signals: SignalList, effect: Effect, ...args: any[]) {
+    on(signals: SignalList, flow: Flow, ...args: any[]) {
       return listen(signals, context, (context, signal) =>
-        effect(context, signal, ...args)
+        flow(context, signal, ...args)
       );
     },
-    debounce(ms: number, signals: SignalList, effect: Effect, ...args: any[]) {
+    debounce(ms: number, signals: SignalList, flow: Flow, ...args: any[]) {
       let timer: any;
       return listen(signals, context, (context, signal, prevTask) => {
         prevTask?.cancel();
         context.onCancel(() => clearTimeout(timer));
 
         timer = setTimeout(() => {
-          effect(context, signal, ...args);
+          flow(context, signal, ...args);
         }, ms);
       });
     },
-    throttle(ms: number, signals: SignalList, effect: Effect, ...args: any[]) {
+    throttle(ms: number, signals: SignalList, flow: Flow, ...args: any[]) {
       let lastExecution = 0;
       return listen(signals, context, (context, signal) => {
         const now = Date.now();
         if (lastExecution && lastExecution + ms > now) return;
         lastExecution = now;
-        return effect(context, signal, ...args);
+        return flow(context, signal, ...args);
       });
     },
-    sequential(signals: SignalList, effect: Effect, ...args: any[]) {
+    sequential(signals: SignalList, flow: Flow, ...args: any[]) {
       return listen(
         signals,
         context,
-        (context, signal) => effect(context, signal, ...args),
+        (context, signal) => flow(context, signal, ...args),
         "sequential"
       );
     },
-    restartable(signals: SignalList, effect: Effect, ...args: any[]) {
+    restartable(signals: SignalList, flow: Flow, ...args: any[]) {
       return listen(signals, context, (context, signal, prevTask) => {
         prevTask?.cancel();
-        return effect(context, signal, ...args);
+        return flow(context, signal, ...args);
       });
     },
-    droppable(signals: SignalList, effect: Effect, ...args: any[]) {
+    droppable(signals: SignalList, flow: Flow, ...args: any[]) {
       return listen(
         signals,
         context,
-        (context, signal) => effect(context, signal, ...args),
+        (context, signal) => flow(context, signal, ...args),
         "droppable"
       );
     },
@@ -655,5 +644,4 @@ export {
   isAwaitable,
   isEmittable,
   isCancellable,
-  EffectContext as EC,
 };
