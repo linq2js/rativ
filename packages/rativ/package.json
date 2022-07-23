@@ -1,6 +1,6 @@
 {
   "name": "rativ",
-  "version": "1.0.1",
+  "version": "0.1.6",
   "description": "A React library for creating reactive components",
   "author": "linq2js <linqtojs@gmail.com>",
   "repository": {
@@ -12,12 +12,14 @@
   "types": "dist/tsc/main.d.ts",
   "directories": {
     "lib": "lib",
-    "mutation": "mutation"
+    "mutation": "mutation",
+    "signal": "signal"
   },
   "files": [
     "lib",
     "mutation",
     "hydration",
+    "signal",
     "dist/tsc"
   ],
   "keywords": [
@@ -28,7 +30,7 @@
     "render",
     "stable",
     "reactive",
-    "atom",
+    "signal",
     "hook",
     "object",
     "immutable",
@@ -44,5 +46,5 @@
     "ts-node": "ts-node",
     "build": "rimraf dist && tsc"
   },
-  "gitHead": "4c2b6ec912c575b71902bbd7fe534eace518dc32"
+  "gitHead": "79be098d55f2b7e925aa059571ead2112b84a2db"
 }

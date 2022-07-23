@@ -16,6 +16,8 @@ import {
   useState,
 } from "react";
 import { mutate, Mutation } from "./mutation";
+import { createCallbackGroup } from "./util/createCallbackGroup";
+import { isPromiseLike } from "./util/isPromiseLike";
 
 export type { Mutation };
 
@@ -99,10 +101,10 @@ export type UpdatableAtom<T = any> = Atom<T> & {
   set(...mutations: Mutation<T>[]): UpdatableAtom<T>;
   /**
    * update current state of the atom
-   * @param value
+   * @param state
    */
   set(
-    value: ((prev: T, context: Context) => T | Promise<T>) | T | Promise<T>
+    state: ((prev: T, context: Context) => T | Promise<T>) | T | Promise<T>
   ): void;
 };
 
@@ -198,23 +200,6 @@ export type Wait = {
 export type CreateSlot = {
   (atom: Atom): ReactNode;
   (computeFn: () => any): ReactNode;
-};
-
-export type CallbackGroup = {
-  /**
-   * add callback into the group and return `remove` function
-   * @param callback
-   */
-  add(callback: Function): VoidFunction;
-  /**
-   * call all callbacks with specified args
-   * @param args
-   */
-  call(...args: any[]): void;
-  /**
-   * remove all callbacks
-   */
-  clear(): void;
 };
 
 /**
@@ -329,40 +314,6 @@ export type AnyComponent<P> = Component<P> | FC<P>;
 export type KeyOf = {
   <T, E extends keyof T>(obj: T, exclude: E[]): Exclude<keyof T, E>[];
   <T>(obj: T): (keyof T)[];
-};
-
-const createCallbackGroup = (): CallbackGroup => {
-  const callbacks = new Set<Function>();
-  return {
-    add(callback: Function) {
-      callbacks.add(callback);
-      let active = true;
-      return () => {
-        if (!active) return;
-        active = false;
-        callbacks.delete(callback);
-      };
-    },
-    clear() {
-      callbacks.clear();
-    },
-    call(...args: any[]) {
-      // optimize performance
-      if (args.length > 2) {
-        callbacks.forEach((callback) => callback(...args));
-      } else if (args.length === 2) {
-        callbacks.forEach((callback) => callback(args[0], args[1]));
-      } else if (args.length === 1) {
-        callbacks.forEach((callback) => callback(args[0]));
-      } else {
-        callbacks.forEach((callback) => callback());
-      }
-    },
-  };
-};
-
-const isPromiseLike = <T>(value: any): value is Promise<T> => {
-  return value && typeof value.then === "function";
 };
 
 const isAbortControllerSupported = typeof AbortController !== "undefined";

@@ -1,4 +1,4 @@
-import { atom, wait, delay, task } from "../lib/main";
+import { atom, wait, delay } from "../lib/main";
 
 test("simple atom", () => {
   const a = atom(0);
@@ -126,25 +126,6 @@ test("emittable: init", () => {
   expect(emittalbe.state).toBe(101);
   emittalbe.emit("dec");
   expect(emittalbe.state).toBe(100);
-});
-
-test("task", async () => {
-  const emittable = atom(0, () => {
-    const delayTask = task(delay);
-    delayTask(10);
-    return 1;
-  });
-  const computed = atom(() => {
-    const loadDataTask = task(emittable.emit);
-    loadDataTask();
-    loadDataTask();
-    loadDataTask();
-    return loadDataTask();
-  });
-  expect(computed.loading).toBe(true);
-  await delay(20);
-  expect(computed.loading).toBe(false);
-  expect(computed.state).toBe(1);
 });
 
 test("toJSON", () => {
