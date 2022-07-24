@@ -105,7 +105,11 @@ export type UpdatableAtom<T = any> = Atom<T> & {
    * @param state
    */
   set(
-    state: ((prev: T, context: Context) => T | Promise<T>) | T | Promise<T>
+    state:
+      | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+      | T
+      | Promise<T>
+      | Awaiter<T>
   ): void;
 };
 
@@ -168,7 +172,7 @@ export type CreateAtom = {
    * create computed atom
    */
   <T>(
-    computeFn: (context: Context) => T | Promise<T>,
+    computeFn: (context: Context) => T | Awaiter<T>,
     options?: AtomOptions
   ): ComputedAtom<T>;
 
@@ -182,20 +186,33 @@ export type CreateAtom = {
    */
   <T, A = void>(
     initialState: T,
-    reducer: (state: NoInfer<T>, action: A, context: Context) => T | Promise<T>,
+    reducer: (state: NoInfer<T>, action: A, context: Context) => T | Awaiter<T>,
     options?: EmittableOptions<A>
   ): EmittableAtom<T, A>;
 };
 
+export type Awaiter<T> = { $$type: "awaiter"; promise: Promise<T> };
+
 export type Wait = {
-  <T>(atom: Atom<T>): T;
-  <S>(awaitables: S): {
-    [key in keyof S]: S[key] extends Atom<infer T>
-      ? T
-      : S[key] extends () => infer T
-      ? T
-      : never;
-  };
+  <A, T, P extends any[]>(
+    awaitable: Atom<A> | Promise<A>,
+    fn: (value: A, ...args: P) => T | Awaiter<T>,
+    ...args: P
+  ): T extends Promise<any> ? never : Awaiter<T>;
+  <A extends { [key: number]: Atom | Promise<any> }, T, P extends any[]>(
+    awaitables: A,
+    fn: (
+      values: {
+        [key in keyof A]: A[key] extends Atom<infer V>
+          ? V
+          : A[key] extends Promise<infer V>
+          ? V
+          : never;
+      },
+      ...args: P
+    ) => T | Awaiter<T>,
+    ...args: P
+  ): T extends Promise<any> ? never : Awaiter<T>;
 };
 
 export type CreateSlot = {
@@ -318,6 +335,7 @@ export type KeyOf = {
 };
 
 const isAbortControllerSupported = typeof AbortController !== "undefined";
+const enqueueTask = Promise.resolve().then.bind(Promise.resolve());
 
 const createContext = (): InternalContext => {
   let ac: AbortController | undefined;
@@ -699,6 +717,10 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     }
   });
 
+  if (process.env.NODE_ENV !== "production") {
+    Object.defineProperty(atom, "$$info", { get: () => storage });
+  }
+
   // computed atom
   if (typeof storage.state === "function") {
     // is normal atom, it has state getter/setter
@@ -711,30 +733,35 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     const invalidateState = () => {
       onCleanup.call();
       const context = createContext();
-      const execute = () => {
-        storage.lastContext = context;
-        try {
-          collectDependencies(
-            () => {
-              context.taskIndex = 0;
-              set(computeState(context));
-            },
-            storage.dependencies,
-            // invalidate state when dependency atoms are changed
-            invalidateState,
-            {
-              parent: key,
-              context,
-              type: "computed",
-              onCleanup: onCleanup.add,
+      storage.lastContext = context;
+      try {
+        collectDependencies(
+          () => {
+            context.taskIndex = 0;
+            let nextState = computeState(context);
+            if (isPromiseLike(nextState)) {
+              throw new Error(
+                "Reducer result cannot be promise object. Use wait() helper to handle async data"
+              );
             }
-          );
-        } catch (ex) {
-          changeStatus(false, ex, storage.state);
-        }
-      };
-
-      execute();
+            if (isAwaiter(nextState)) {
+              nextState = nextState.promise;
+            }
+            set(nextState);
+          },
+          storage.dependencies,
+          // invalidate state when dependency atoms are changed
+          invalidateState,
+          {
+            parent: key,
+            context,
+            type: "computed",
+            onCleanup: onCleanup.add,
+          }
+        );
+      } catch (ex) {
+        changeStatus(false, ex, storage.state);
+      }
     };
 
     Object.assign(atom, {
@@ -762,25 +789,29 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         emit(action: any) {
           allListeners.emit.call(storage.state, action);
           const context = (storage.lastContext = createContext());
-          const execute = () => {
-            onCleanup.call();
-            try {
-              scopeOfWork(
-                () => {
-                  context.taskIndex = 0;
-                  const nextState = reducer!(storage.state, action, context);
-                  set(nextState);
-                },
-                { type: "emittable", context, onCleanup: onCleanup.add }
-              );
-            } catch (ex) {
-              changeStatus(false, ex, storage.state);
-            }
+          onCleanup.call();
+          try {
+            scopeOfWork(
+              () => {
+                context.taskIndex = 0;
+                let nextState = reducer!(storage.state, action, context);
+                if (isPromiseLike(nextState)) {
+                  throw new Error(
+                    "Reducer result cannot be promise object. Use wait() helper to handle async data"
+                  );
+                }
+                if (isAwaiter(nextState)) {
+                  nextState = nextState.promise;
+                }
+                set(nextState);
+              },
+              { type: "emittable", context, onCleanup: onCleanup.add }
+            );
+          } catch (ex) {
+            changeStatus(false, ex, storage.state);
+          }
 
-            return atom;
-          };
-
-          return execute();
+          return atom;
         },
         reset() {
           set(initialState);
@@ -818,36 +849,6 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   onInit.call();
 
   return atom;
-};
-
-export type Read = {
-  <T>(atom: Atom<T>): Promise<T>;
-  <T extends { [key: number]: Atom<any> }>(atoms: T): Promise<{
-    [key in keyof T]: T[key] extends Atom<infer V> ? V : never;
-  }>;
-};
-
-export const read: Read = (inputs: any): any => {
-  if (Array.isArray(inputs)) {
-    return Promise.all(inputs.map(read));
-  }
-  if (!inputs.loading) return Promise.resolve(inputs.state);
-
-  const cleanup = createCallbackGroup();
-  if (currentScope?.onCleanup) {
-    cleanup.add(currentScope.onCleanup(cleanup.call));
-  }
-
-  return new Promise((resolve, reject) => {
-    cleanup.add(
-      inputs.on("status", () => {
-        if (inputs.loading) return;
-        cleanup.call();
-        if (inputs.error) return reject(inputs.error);
-        resolve(inputs.state);
-      })
-    );
-  });
 };
 
 const createStableFunction = (
@@ -1124,7 +1125,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
   ) as any;
 };
 
-export const isAtom = <T>(value: any): value is Atom<T> => {
+const isAtom = <T>(value: any): value is Atom<T> => {
   return (
     value &&
     typeof value === "object" &&
@@ -1133,7 +1134,7 @@ export const isAtom = <T>(value: any): value is Atom<T> => {
   );
 };
 
-export const SlotInner = memo((props: { render: () => any; token: any }) => {
+const SlotInner = memo((props: { render: () => any; token: any }) => {
   const rerender = useState<any>()[1];
   const context = useState(() => ({
     dependencies: new Map<any, Function>(),
@@ -1148,7 +1149,7 @@ export const SlotInner = memo((props: { render: () => any; token: any }) => {
   );
 });
 
-export const SlotWrapper: FC<{ slot: any }> = (props) => {
+const SlotWrapper: FC<{ slot: any }> = (props) => {
   const slotRef = useRef(props.slot);
   const contextRef = useRef<{ token?: {}; slot?: any }>({});
   const render = useState(() =>
@@ -1176,7 +1177,7 @@ export const SlotWrapper: FC<{ slot: any }> = (props) => {
  * @param slot
  * @returns
  */
-export const slot: CreateSlot = (slot): any => {
+const createSlot: CreateSlot = (slot): any => {
   return createElement(SlotWrapper, { slot });
 };
 
@@ -1184,7 +1185,7 @@ export const slot: CreateSlot = (slot): any => {
  * use effect
  * @param fn
  */
-export const effect = (fn: Effect) => {
+const createEffect = (fn: Effect) => {
   if (!currentScope?.addEffect) {
     throw new Error(
       "Cannot call effect() helper outside stable part of stable component"
@@ -1193,7 +1194,7 @@ export const effect = (fn: Effect) => {
   currentScope.addEffect(fn);
 };
 
-export const defaultProps = <T>(props: T, defaultValues: Partial<T>) => {
+const defaultProps = <T>(props: T, defaultValues: Partial<T>) => {
   if (!currentScope?.addEffect) {
     throw new Error(
       "Cannot call defaultProps() helper outside stable part of stable component"
@@ -1207,20 +1208,18 @@ export const defaultProps = <T>(props: T, defaultValues: Partial<T>) => {
  * @param directives
  * @returns
  */
-export const directive = <E = HTMLElement>(
+const createDirective = <E = HTMLElement>(
   directives: Directive<E> | Directive<E>[]
 ): RefObject<any> => {
   const ref = createRef<E>();
   const directiveList = Array.isArray(directives) ? directives : [directives];
-  effect(() => {
+  createEffect(() => {
     directiveList.forEach((directive) => directive(ref.current as E));
   });
   return ref;
 };
 
-export { createAtom as atom, createStableComponent as stable };
-
-export const watch: Watch = (watchFn, options) => {
+const createWatcher: Watch = (watchFn, options) => {
   if (typeof options === "function") {
     options = { callback: options };
   }
@@ -1272,10 +1271,7 @@ export type CreateSnapshot = {
   <T>(atoms: Atom[], reset: boolean, callback: () => T): T;
 };
 
-export const snapshot: CreateSnapshot = (
-  atoms: Atom[],
-  ...args: any[]
-): any => {
+const createSnapshot: CreateSnapshot = (atoms: Atom[], ...args: any[]): any => {
   const revert = createCallbackGroup();
   let callback: VoidFunction | undefined;
   let reset = false;
@@ -1305,7 +1301,7 @@ export const snapshot: CreateSnapshot = (
  * @param component
  * @returns
  */
-export const create = <C>(
+const createComponentBuilder = <C>(
   component: C
 ): C extends AnyComponent<infer P> ? ComponentBuilder<C, P, P> : never => {
   const oldNames: Record<string, string> = {};
@@ -1423,10 +1419,7 @@ export const create = <C>(
   } as any;
 };
 
-export const keyOf: KeyOf = (
-  obj: Record<string, unknown>,
-  exclude?: string[]
-) => {
+const keyOf: KeyOf = (obj: Record<string, unknown>, exclude?: string[]) => {
   if (exclude) {
     return Object.keys(obj).filter((x) => !exclude.includes(x));
   }
@@ -1489,4 +1482,100 @@ const createAtomFamily = <A extends any[], T = unknown>(
   };
 };
 
-export { createAtomFamily as family, delay };
+const isAwaiter = <T>(value: any): value is Awaiter<T> => {
+  return value && value.$$type === "awaiter";
+};
+
+const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
+  const scope = currentScope;
+
+  if (!scope) {
+    throw new Error("wait() helper cannot be called outside atom scope");
+  }
+
+  const cleanup = createCallbackGroup();
+  let active = true;
+
+  if (scope.onCleanup) {
+    cleanup.add(
+      scope.onCleanup(() => {
+        enqueueTask(() => (active = false));
+        cleanup.call();
+      })
+    );
+  }
+  const handleAwaitables = (
+    awaitables: (Promise<any> | Atom)[],
+    resultSelector: (values: any[]) => any
+  ) => {
+    return {
+      $$type: "awaiter",
+      promise: new Promise((resolve, reject) => {
+        let count = 0;
+        let done = false;
+        const values: any[] = [];
+        const onDone = (value: any, index: number, error: any) => {
+          if (done) return;
+          if (!active) return;
+
+          if (error) {
+            done = true;
+            return reject(error);
+          }
+          count++;
+          values[index] = value;
+          if (count >= awaitables.length) {
+            done = true;
+            scopeOfWork(() => {
+              const next = fn(resultSelector(values), ...args);
+              resolve(next);
+            }, scope);
+          }
+        };
+
+        awaitables.forEach((awaitable, index) => {
+          if (isPromiseLike(awaitable)) {
+            awaitable.then(
+              (value) => active && onDone(value, index, undefined),
+              (error) => active && onDone(undefined, index, error)
+            );
+            return;
+          }
+
+          if (awaitable.loading) {
+            cleanup.add(
+              awaitable.on("status", () => {
+                if (awaitable.loading) return;
+                onDone(awaitable.state, index, awaitable.error);
+              })
+            );
+          } else {
+            onDone(awaitable.state, index, undefined);
+          }
+        });
+      }),
+    } as Awaiter<any>;
+  };
+
+  if (isPromiseLike(input) || isAtom(input)) {
+    return handleAwaitables([input], (values) => values[0]);
+  }
+  return handleAwaitables(input, (values) => values);
+};
+
+export {
+  createAtomFamily as family,
+  delay,
+  keyOf,
+  isAtom,
+  createEffect as effect,
+  createSlot as slot,
+  defaultProps,
+  createDirective as directive,
+  createAtom as atom,
+  createStableComponent as stable,
+  createWatcher as watch,
+  createSnapshot as snapshot,
+  createComponentBuilder as create,
+  createAwaiter as wait,
+};

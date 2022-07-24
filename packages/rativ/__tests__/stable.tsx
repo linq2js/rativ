@@ -7,7 +7,7 @@ import {
   atom,
   slot,
   stable,
-  read,
+  wait,
 } from "../lib/main";
 
 test("default props", () => {
@@ -57,10 +57,7 @@ test("dispose local atoms", () => {
 });
 
 test("suspense", async () => {
-  const loadDataAtom = atom(async () => {
-    await delay(10);
-    return 10;
-  });
+  const loadDataAtom = atom(() => wait(delay(10), () => 10));
   const Component = stable(() => {
     return (
       <Suspense fallback={<div data-testid="loading"></div>}>
@@ -76,15 +73,23 @@ test("suspense", async () => {
 
 test("rerender", async () => {
   let updateCount = 0;
-  const count = atom(async () => {
-    await delay(10);
-    return 100;
-  });
-  const factor = atom(1);
-  const result = atom(async () => {
-    return (await read(count)) * (await read(factor));
-  });
+  const count = atom(
+    () => {
+      console.log("re-evaluate count");
+      return wait(delay(10), () => 100);
+    },
+    { name: "count" }
+  );
+  const factor = atom(1, { name: "factor" });
+  const result = atom(
+    () => {
+      console.log("re-evaluate result");
+      return wait([count, factor], ([count, factor]) => count * factor);
+    },
+    { name: "result" }
+  );
   result.on(() => {
+    console.log("result changed");
     updateCount++;
   });
   const Component = stable(() => () => (
@@ -100,11 +105,14 @@ test("rerender", async () => {
   await act(() => delay(20));
   expect(getByTestId("output").textContent).toEqual("100");
   act(() => {
+    console.log("change factor");
     factor.state++;
   });
   await act(() => delay(20));
+
   expect(getByTestId("output").textContent).toEqual("200");
   act(() => {
+    console.log("change factor");
     factor.state++;
   });
   await act(() => delay(20));
