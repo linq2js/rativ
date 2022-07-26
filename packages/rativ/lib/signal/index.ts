@@ -31,18 +31,25 @@ export type WaitResult<T> = {
     ? AsyncResult<V>
     : T[key] extends Task<infer V>
     ? AsyncResult<V>
+    : T[key] extends Flow<any[], infer V>
+    ? AsyncResult<V>
     : never;
 };
 
 export type SignalList = Signal | (Signal | SignalList)[];
 
+export type AwaitableMap = Record<
+  string,
+  Flow<any[], any> | Awaitable | Promise<any>
+>;
+
 export type FlowContext = Cancellable & {
   onCancel(listener: VoidFunction): VoidFunction;
   onDispose(listener: VoidFunction): VoidFunction;
   onError(listener: (error: any) => void): VoidFunction;
-  race<T>(awaitables: T): Promise<Partial<WaitResult<T>>>;
-  all<T>(awaitables: T): Promise<WaitResult<T>>;
-  allSettled<T>(awaitables: T): Promise<WaitResult<T>>;
+  race<T extends AwaitableMap>(awaitables: T): Promise<Partial<WaitResult<T>>>;
+  all<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
+  allSettled<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
   fork<A extends any[], R = void>(flow: Flow<A, R>, ...args: A): Task<R>;
 
   call<A extends any[], R>(flow: Flow<A, R>, ...args: A): R;
@@ -429,6 +436,7 @@ const createTaskContext = (
       const cleanup = createCallbackGroup();
       let awaitableCount = 0;
       let dones = 0;
+
       cleanup.add(onDispose.add(cleanup.call));
 
       const handleDone = (key: string, result?: any, error?: any) => {
@@ -449,28 +457,33 @@ const createTaskContext = (
         }
       };
 
+      const handleTask = (key: string, task: Task<any>) => {
+        if (task.status() !== "running") {
+          handleDone(key, task.result(), task.error());
+          return;
+        }
+        cleanup.add(
+          task.on(() => handleDone(key, task.result(), task.error()))
+        );
+        cleanup.add(task.cancel);
+      };
+
       Object.keys(awaitables).forEach((key) => {
         awaitableCount++;
-        const awaitable: Awaitable | Promise<any> = awaitables[key];
+        const awaitable: Awaitable | Promise<any> | Flow = awaitables[key];
 
         if (isPromiseLike(awaitable)) {
           const task = createTask(() => awaitable);
-          cleanup.add(
-            task.on(() => handleDone(key, task.result(), task.error()))
-          );
-          cleanup.add(task.cancel);
           task();
-          return;
+          return handleTask(key, task);
         }
 
         if (isTask(awaitable)) {
-          cleanup.add(
-            awaitable.on(() =>
-              handleDone(key, awaitable.result(), awaitable.error())
-            )
-          );
-          cleanup.add(awaitable.cancel);
-          return;
+          return handleTask(key, awaitable);
+        }
+
+        if (typeof awaitable === "function") {
+          return handleTask(key, context.fork(awaitable));
         }
 
         if (isSignal(awaitable)) {
@@ -478,6 +491,7 @@ const createTaskContext = (
           return;
         }
 
+        // normal awaitable
         cleanup.add(awaitable.on(() => handleDone(key)));
       });
     });

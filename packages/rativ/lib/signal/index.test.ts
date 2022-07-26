@@ -1,4 +1,4 @@
-import { signal, spawn, delay, Flow } from "./";
+import { signal, spawn, delay, Flow, FlowContext } from "./";
 
 test("signal without payload", () => {
   let count = 0;
@@ -202,7 +202,7 @@ test("call() async", async () => {
   expect(count).toBe(1);
 });
 
-test("race", async () => {
+test("race()", async () => {
   const task = spawn(async ({ race, delay }) => {
     const { p1, p2 } = await race({ p1: delay(5, 1), p2: delay(3, 2) });
     expect(p1).toBeUndefined();
@@ -212,13 +212,31 @@ test("race", async () => {
   expect(task.error()).toBeUndefined();
 });
 
+test("race() with flow", async () => {
+  const myFlow = async ({ delay }: FlowContext) => {
+    await delay(3, 2);
+    return 2;
+  };
+  const task = spawn(async ({ race, delay }) => {
+    const results = await race({ p1: delay(5, 1), myFlow });
+    expect(results.p1).toBeUndefined();
+    expect(results.myFlow?.result).toBe(2);
+  });
+  await delay(20);
+  expect(task.error()).toBeUndefined();
+});
+
 test("race() with task", async () => {
   const clicked = signal();
   let count = 0;
+
   spawn(async ({ race, delay, on }) => {
+    const p2 = on(clicked, () => {
+      count++;
+    });
     await race({
       p1: delay(10),
-      p2: on(clicked, () => count++),
+      p2,
     });
   });
   clicked();

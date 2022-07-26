@@ -4,7 +4,6 @@ export type Updater<T, A extends any[]> = {
   update(...args: A): void;
   cancel(): void;
 };
-export type Cancel = VoidFunction;
 
 export const asyncUpdate = <T, A extends any[]>(
   current: T,
