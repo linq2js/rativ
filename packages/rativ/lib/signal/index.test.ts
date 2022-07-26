@@ -352,3 +352,29 @@ test("search", async () => {
   await delay(30);
   expect(logs).toEqual(["handleSearchTermChanged", "delay", "result:abc"]);
 });
+
+test("once", () => {
+  let count = 0;
+  const clicked = signal();
+  spawn(({ on }) => {
+    on(clicked, () => count++).once();
+  });
+  clicked();
+  clicked();
+  clicked();
+  clicked();
+  expect(count).toBe(1);
+});
+
+test("times", () => {
+  let count = 0;
+  const clicked = signal();
+  spawn(({ on }) => {
+    on(clicked, () => count++).times(3);
+  });
+  clicked();
+  clicked();
+  clicked();
+  clicked();
+  expect(count).toBe(3);
+});

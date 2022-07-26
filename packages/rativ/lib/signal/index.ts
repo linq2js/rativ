@@ -43,6 +43,11 @@ export type AwaitableMap = Record<
   Flow<any[], any> | Awaitable | Promise<any>
 >;
 
+export type ContinuousTask = Task & {
+  once(): ContinuousTask;
+  times(value: number): ContinuousTask;
+};
+
 export type FlowContext = Cancellable & {
   abortController(): AbortController | undefined;
   onCancel(listener: VoidFunction): VoidFunction;
@@ -68,71 +73,71 @@ export type FlowContext = Cancellable & {
     signal: Signal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
   on<A extends any[]>(
     signals: SignalList,
     flow: Flow<[any, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
 
   debounce<T, A extends any[]>(
     ms: number,
     signal: Signal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
   debounce<A extends any[]>(
     ms: number,
     signals: SignalList,
     flow: Flow<[any, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
 
   throttle<T, A extends any[]>(
     ms: number,
     signal: Signal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
   throttle<A extends any[]>(
     ms: number,
     signals: SignalList,
     flow: Flow<[any, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
 
   sequential<T, A extends any[]>(
     signal: Signal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
   sequential<A extends any[]>(
     signals: SignalList,
     flow: Flow<[any, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
 
   restartable<T, A extends any[]>(
     signal: Signal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
   restartable<A extends any[]>(
     signals: SignalList,
     flow: Flow<[any, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
 
   droppable<T, A extends any[]>(
     signal: Signal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
   droppable<A extends any[]>(
     signals: SignalList,
     flow: Flow<[any, ...A]>,
     ...args: A
-  ): Task;
+  ): ContinuousTask;
 
   infinite<A extends any[], R>(callback: (...args: A) => R, ...args: A): void;
 };
@@ -368,54 +373,74 @@ const listen = (
   ) => void,
   mode?: "sequential" | "droppable"
 ) => {
-  return parentContext.fork(async (listenContext) => {
-    const cleanup = createCallbackGroup();
-    const signalQueue: Signal<any>[] = [];
-    let currentTask: Task<any> | undefined;
-    let taskDoneHandled = false;
+  let maxTimes = Number.MAX_VALUE;
+  return Object.assign(
+    parentContext.fork(async (listenContext) => {
+      const cleanup = createCallbackGroup();
+      const signalQueue: Signal<any>[] = [];
+      let currentTask: Task<any> | undefined;
+      let taskDoneHandled = false;
+      let times = 0;
+      const createForkedTask = (signal: Signal<any>) =>
+        listenContext.fork(callback, signal.payload(), currentTask);
 
-    const handleTaskDone = () => {
-      if (listenContext.cancelled()) return;
-      if (!signalQueue.length) return;
-      if (taskDoneHandled) return;
-      const signal = signalQueue.shift()!;
-      currentTask = listenContext.fork(callback, signal.payload(), currentTask);
-      taskDoneHandled = true;
-      currentTask.on(() => {
-        if (currentTask?.error()) {
-          throwError(listenContext, currentTask.error());
-          return;
-        }
-        taskDoneHandled = false;
-        handleTaskDone();
-      });
-    };
-
-    forEachSignalList(signals, (signal) => {
-      cleanup.add(
-        signal.on(() => {
-          if (listenContext.cancelled()) return;
-          if (mode === "droppable" && currentTask?.status() === "running") {
+      const handleTaskDone = () => {
+        if (listenContext.cancelled()) return;
+        if (!signalQueue.length) return;
+        if (taskDoneHandled) return;
+        times++;
+        currentTask = createForkedTask(signalQueue.shift()!);
+        taskDoneHandled = true;
+        currentTask.on(() => {
+          if (currentTask?.error()) {
+            throwError(listenContext, currentTask.error());
             return;
           }
+          taskDoneHandled = false;
+          handleTaskDone();
+        });
 
-          if (mode === "sequential") {
-            signalQueue.push(signal);
-            handleTaskDone();
-          } else {
-            currentTask = listenContext.fork(
-              callback,
-              signal.payload(),
-              currentTask
-            );
-          }
-        })
-      );
-    });
-    cleanup.add(parentContext.onDispose(cleanup.call));
-    listenContext.onDispose(cleanup.call);
-    await forever;
-  });
+        if (times >= maxTimes) {
+          listenContext.cancel();
+        }
+      };
+
+      forEachSignalList(signals, (signal) => {
+        cleanup.add(
+          signal.on(() => {
+            if (listenContext.cancelled()) return;
+            if (mode === "droppable" && currentTask?.status() === "running") {
+              return;
+            }
+
+            if (mode === "sequential") {
+              signalQueue.push(signal);
+              handleTaskDone();
+            } else {
+              times++;
+              currentTask = createForkedTask(signal);
+              if (times >= maxTimes) {
+                listenContext.cancel();
+              }
+            }
+          })
+        );
+      });
+      cleanup.add(parentContext.onDispose(cleanup.call));
+      listenContext.onDispose(cleanup.call);
+      await forever;
+    }),
+    {
+      once() {
+        maxTimes = 1;
+        return this;
+      },
+      times(value: number) {
+        maxTimes = value;
+        return this;
+      },
+    }
+  ) as ContinuousTask;
 };
 
 const isAbortControllerSupported = typeof AbortController !== "undefined";
