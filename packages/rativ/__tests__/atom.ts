@@ -145,3 +145,22 @@ test("async computed atom #2", async () => {
   expect(result.state).toEqual(300);
   expect(updateCount).toBe(4);
 });
+
+test("updater", async () => {
+  const count = atom(1);
+  const update1 = async () => {
+    const updater = count.set();
+    await delay(10);
+    updater.update(1);
+  };
+  const update2 = () => {
+    const updater = count.set();
+    updater.update(2);
+  };
+
+  update1();
+  update2();
+
+  await delay(15);
+  expect(count.state).toBe(2);
+});

@@ -19,6 +19,7 @@ import { mutate, Mutation } from "./mutation";
 import { createCallbackGroup } from "./util/createCallbackGroup";
 import { isPromiseLike } from "./util/isPromiseLike";
 import { delay } from "./util/delay";
+import { asyncUpdate, Updater } from "./util/asyncUpdate";
 
 export type { Mutation };
 
@@ -90,11 +91,21 @@ export type Atom<T = any> = {
   readonly state: T;
 };
 
-export type UpdatableAtom<T = any> = Atom<T> & {
+export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
   /**
    * get or set current state of the atom
    */
   state: T;
+  set(): Updater<
+    T,
+    | Mutation<T>[]
+    | [
+        | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+        | T
+        | Promise<T>
+        | Awaiter<T>
+      ]
+  >;
   /**
    * update current state of the atom by using specfied mutations
    * @param mutations
@@ -591,7 +602,11 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     return storage.state;
   };
 
-  const set = (...args: any[]) => {
+  const set = (...args: any[]): any => {
+    if (!args.length) {
+      return asyncUpdate(storage.state, () => storage.changeToken, set);
+    }
+
     let nextState: any;
 
     if (typeof args[0] === "function") {
@@ -1528,7 +1543,11 @@ const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
             done = true;
             scopeOfWork(() => {
               const next = fn(resultSelector(values), ...args);
-              resolve(next);
+              if (isAwaiter(next)) {
+                resolve(next.promise);
+              } else {
+                resolve(next);
+              }
             }, scope);
           }
         };

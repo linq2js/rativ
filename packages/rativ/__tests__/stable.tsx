@@ -75,7 +75,6 @@ test("rerender", async () => {
   let updateCount = 0;
   const count = atom(
     () => {
-      console.log("re-evaluate count");
       return wait(delay(10), () => 100);
     },
     { name: "count" }
@@ -83,13 +82,11 @@ test("rerender", async () => {
   const factor = atom(1, { name: "factor" });
   const result = atom(
     () => {
-      console.log("re-evaluate result");
       return wait([count, factor], ([count, factor]) => count * factor);
     },
     { name: "result" }
   );
   result.on(() => {
-    console.log("result changed");
     updateCount++;
   });
   const Component = stable(() => () => (
@@ -105,14 +102,12 @@ test("rerender", async () => {
   await act(() => delay(20));
   expect(getByTestId("output").textContent).toEqual("100");
   act(() => {
-    console.log("change factor");
     factor.state++;
   });
   await act(() => delay(20));
 
   expect(getByTestId("output").textContent).toEqual("200");
   act(() => {
-    console.log("change factor");
     factor.state++;
   });
   await act(() => delay(20));
