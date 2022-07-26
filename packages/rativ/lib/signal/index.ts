@@ -44,6 +44,7 @@ export type AwaitableMap = Record<
 >;
 
 export type FlowContext = Cancellable & {
+  abortController(): AbortController | undefined;
   onCancel(listener: VoidFunction): VoidFunction;
   onDispose(listener: VoidFunction): VoidFunction;
   onError(listener: (error: any) => void): VoidFunction;
@@ -417,11 +418,13 @@ const listen = (
   });
 };
 
+const isAbortControllerSupported = typeof AbortController !== "undefined";
 const createTaskContext = (
   handleError: (error: any) => void,
   handleForkedTask: (task: Task<any>) => void
 ): FlowContext => {
   let disposed = false;
+  let abortController: AbortController | undefined;
   const onCancel = createCallbackGroup();
   const onDispose = createCallbackGroup();
   const onError = createCallbackGroup();
@@ -502,6 +505,13 @@ const createTaskContext = (
     onCancel: onCancel.add,
     onDispose: onDispose.add,
     onError: onError.add,
+    abortController() {
+      if (!abortController && isAbortControllerSupported) {
+        abortController = new AbortController();
+        onCancel.add(abortController.abort);
+      }
+      return abortController;
+    },
     race(awaitables) {
       return wait(awaitables, "race");
     },
