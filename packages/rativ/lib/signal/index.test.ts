@@ -319,3 +319,36 @@ test("sequential", async () => {
   await delay(12);
   expect(count).toBe(3);
 });
+
+test("search", async () => {
+  const logs: string[] = [];
+  const searchTermChanged = signal<string>();
+  const cancelSearch = signal();
+
+  const searchUsers = async ({ delay }: FlowContext, term: string) => {
+    logs.push("delay");
+    await delay(10);
+    logs.push("result:" + term);
+  };
+
+  const handleSearchTermChanged = async (
+    { race, fork }: FlowContext,
+    term: string
+  ) => {
+    logs.push("handleSearchTermChanged");
+    // cancel searchUsers task if cancelSearch signal is emitted
+    race({
+      searchUsers: fork(searchUsers, term),
+      cancelSearch,
+    });
+  };
+
+  spawn(async ({ debounce }) => {
+    // listen searchTermChanged signal and debounce execution of handleSearchTermChanged in 300ms
+    debounce(10, searchTermChanged, handleSearchTermChanged);
+  });
+
+  searchTermChanged("abc");
+  await delay(30);
+  expect(logs).toEqual(["handleSearchTermChanged", "delay", "result:abc"]);
+});

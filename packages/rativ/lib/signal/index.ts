@@ -485,13 +485,13 @@ const createTaskContext = (
           return handleTask(key, awaitable);
         }
 
-        if (typeof awaitable === "function") {
-          return handleTask(key, context.fork(awaitable));
-        }
-
         if (isSignal(awaitable)) {
           cleanup.add(awaitable.on(() => handleDone(key, awaitable.payload())));
           return;
+        }
+
+        if (typeof awaitable === "function") {
+          return handleTask(key, context.fork(awaitable));
         }
 
         // normal awaitable
