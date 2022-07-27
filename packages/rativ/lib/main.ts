@@ -122,6 +122,8 @@ export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
       | Promise<T>
       | Awaiter<T>
   ): void;
+
+  cancel(): void;
 };
 
 export type Context = {
@@ -151,6 +153,8 @@ export type EmittableAtom<T = any, A = void> = Atom<T> & {
    * @param listener
    */
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
+
+  cancel(): void;
 };
 
 export type AtomOptions = {
@@ -703,6 +707,10 @@ const createAtom: CreateAtom = (...args: any[]): any => {
           storage = prevStorage;
         }
       };
+    },
+    cancel() {
+      if (!storage.loading) return;
+      changeStatus(false, undefined, storage.state);
     },
   };
 

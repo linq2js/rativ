@@ -212,17 +212,39 @@ test("race()", async () => {
   expect(task.error()).toBeUndefined();
 });
 
-test("race() with flow", async () => {
-  const myFlow = async ({ delay }: FlowContext) => {
-    await delay(3, 2);
+test("race() with flow #1", async () => {
+  let cancelled = false;
+  const myFlow = async ({ delay, onCancel }: FlowContext) => {
+    onCancel(() => (cancelled = true));
+    await delay(10, 2);
     return 2;
   };
-  const task = spawn(async ({ race, delay }) => {
-    const results = await race({ p1: delay(5, 1), myFlow });
-    expect(results.p1).toBeUndefined();
-    expect(results.myFlow?.result).toBe(2);
+  const task = spawn(async ({ race, delay, fork }) => {
+    const results = await race({ p1: delay(5, 1), myFlow: fork(myFlow) });
+    expect(results.p1?.result).toBe(1);
+    expect(results.myFlow?.result).toBeUndefined();
   });
   await delay(20);
+  expect(cancelled).toBeTruthy();
+  expect(task.error()).toBeUndefined();
+});
+
+test("race() with flow #2", async () => {
+  let cancelled = false;
+  const myFlow = async ({ delay, onCancel }: FlowContext) => {
+    onCancel(() => (cancelled = true));
+    await delay(10, 2);
+    return 2;
+  };
+  const clicked = signal();
+  const task = spawn(async ({ race, fork }) => {
+    const results = await race({ p1: clicked, myFlow: fork(myFlow) });
+    expect(results.p1).not.toBeUndefined();
+    expect(results.myFlow?.result).toBeUndefined();
+  });
+  clicked();
+  await delay(20);
+  expect(cancelled).toBeTruthy();
   expect(task.error()).toBeUndefined();
 });
 
