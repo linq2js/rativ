@@ -374,15 +374,22 @@ const listen = (
   mode?: "sequential" | "droppable"
 ) => {
   let maxTimes = Number.MAX_VALUE;
+
   return Object.assign(
     parentContext.fork(async (listenContext) => {
       const cleanup = createCallbackGroup();
       const signalQueue: Signal<any>[] = [];
+      let done: Function | undefined;
       let currentTask: Task<any> | undefined;
       let taskDoneHandled = false;
       let times = 0;
       const createForkedTask = (signal: Signal<any>) =>
         listenContext.fork(callback, signal.payload(), currentTask);
+      const stopIfPossible = () => {
+        if (times < maxTimes) return;
+        cleanup.call();
+        done?.();
+      };
 
       const handleTaskDone = () => {
         if (listenContext.cancelled()) return;
@@ -399,10 +406,7 @@ const listen = (
           taskDoneHandled = false;
           handleTaskDone();
         });
-
-        if (times >= maxTimes) {
-          listenContext.cancel();
-        }
+        stopIfPossible();
       };
 
       forEachSignalList(signals, (signal) => {
@@ -419,16 +423,16 @@ const listen = (
             } else {
               times++;
               currentTask = createForkedTask(signal);
-              if (times >= maxTimes) {
-                listenContext.cancel();
-              }
+              stopIfPossible();
             }
           })
         );
       });
       cleanup.add(parentContext.onDispose(cleanup.call));
       listenContext.onDispose(cleanup.call);
-      await forever;
+      await new Promise((resolve) => {
+        done = resolve;
+      });
     }),
     {
       once() {
@@ -684,6 +688,7 @@ const createTaskContext = (
 };
 
 export {
+  forever,
   createSignal as signal,
   createTask as task,
   delay,
