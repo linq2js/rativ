@@ -588,6 +588,8 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   const get = (selector?: Function) => {
     const scopeType = currentScope?.type;
     if (scopeType === "component") {
+      handleDependency(allListeners.status.add);
+
       if (storage.loading) {
         throw storage.task;
       }
