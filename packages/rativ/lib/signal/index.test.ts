@@ -400,3 +400,27 @@ test("times", () => {
   clicked();
   expect(count).toBe(3);
 });
+
+test("infinite", async () => {
+  const clicked = signal();
+  let count = 0;
+
+  spawn(async ({ infinite, when }) => {
+    await infinite(async () => {
+      await when(clicked);
+      count++;
+    });
+  });
+
+  clicked();
+  await delay();
+  expect(count).toBe(1);
+
+  clicked();
+  await delay();
+  expect(count).toBe(2);
+
+  clicked();
+  await delay();
+  expect(count).toBe(3);
+});

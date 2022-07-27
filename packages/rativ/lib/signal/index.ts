@@ -139,7 +139,10 @@ export type FlowContext = Cancellable & {
     ...args: A
   ): ContinuousTask;
 
-  infinite<A extends any[], R>(callback: (...args: A) => R, ...args: A): void;
+  infinite<A extends any[], R extends void | boolean | Promise<void | boolean>>(
+    callback: (...args: A) => R,
+    ...args: A
+  ): R;
 };
 
 export type Task<T = void> = Cancellable &
@@ -665,10 +668,17 @@ const createTaskContext = (
       );
     },
     infinite(callback, ...args) {
-      while (true) {
-        if (cancellable.cancelled()) break;
-        callback(...args);
-      }
+      const next = (): any => {
+        if (cancellable.cancelled()) return;
+        const result = callback(...args);
+        if (result === false) return;
+        if (isPromiseLike(result)) {
+          return result.finally(next);
+        }
+        return next();
+      };
+
+      return next();
     },
   };
 
