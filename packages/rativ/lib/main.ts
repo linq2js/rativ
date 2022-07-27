@@ -597,6 +597,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         throw storage.error;
       }
     }
+
     handleDependency(allListeners.state.add);
 
     if (typeof selector === "function") return selector(storage.state);
@@ -643,6 +644,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         })
         .catch((error) => {
           if (storage.changeToken !== token) return;
+          if (error && error.name === "AbortError") return;
           storage.task = undefined;
           changeStatus(false, error, storage.state);
         });
