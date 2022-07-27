@@ -537,7 +537,7 @@ const createTaskContext = (
     abortController() {
       if (!abortController && isAbortControllerSupported) {
         abortController = new AbortController();
-        onCancel.add(abortController.abort);
+        onCancel.add(() => abortController?.abort());
       }
       return abortController;
     },
