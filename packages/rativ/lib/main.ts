@@ -644,7 +644,10 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         })
         .catch((error) => {
           if (storage.changeToken !== token) return;
-          if (error && error.name === "AbortError") return;
+          if (error && error.name === "AbortError") {
+            changeStatus(false, undefined, storage.state);
+            return;
+          }
           storage.task = undefined;
           changeStatus(false, error, storage.state);
         });
