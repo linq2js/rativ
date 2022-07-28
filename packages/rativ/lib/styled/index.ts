@@ -3,7 +3,7 @@ import { stable } from "../main";
 
 type StyleCombiner<S, R> = (styles: S[], props: Record<string, any>) => R;
 
-type StyleBuilder<S, P> = (props: P) => S | S[] | (() => S | S[]);
+type StyleBuilder<S, P> = S | ((props: P) => S | S[] | (() => S | S[]));
 
 type ComponentType<P> =
   | Component<P>
@@ -50,7 +50,8 @@ const createStyled = <P, S>(
   combinder: StyleCombiner<S, any>
 ) => {
   return stable((props: P) => {
-    const stableStyles = builder(props);
+    const stableStyles =
+      typeof builder === "function" ? (builder as Function)(props) : builder;
     const createComponentWithStyles = (styles: S | S[]) => {
       const styleProps = combinder(
         Array.isArray(styles) ? styles : [styles],
