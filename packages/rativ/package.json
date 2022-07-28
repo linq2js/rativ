@@ -13,13 +13,15 @@
   "directories": {
     "lib": "lib",
     "mutation": "mutation",
-    "signal": "signal"
+    "signal": "signal",
+    "styled": "styled"
   },
   "files": [
     "lib",
     "mutation",
     "hydration",
     "signal",
+    "styled",
     "dist/tsc"
   ],
   "keywords": [
@@ -35,7 +37,8 @@
     "object",
     "immutable",
     "state",
-    "state management"
+    "state management",
+    "styled"
   ],
   "peerDependenciesMeta": {},
   "scripts": {
