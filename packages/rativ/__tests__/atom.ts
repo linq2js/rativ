@@ -164,3 +164,12 @@ test("updater", async () => {
   await delay(15);
   expect(count.state).toBe(2);
 });
+
+test("cancel update", async () => {
+  const count = atom(0);
+
+  const cancel = count.set(delay(10, 5));
+  cancel();
+  await delay(15);
+  expect(count.state).toBe(0);
+});

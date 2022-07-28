@@ -110,7 +110,7 @@ export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
    * update current state of the atom by using specfied mutations
    * @param mutations
    */
-  set(...mutations: Mutation<T>[]): UpdatableAtom<T>;
+  set(...mutations: Mutation<T>[]): VoidFunction;
   /**
    * update current state of the atom
    * @param state
@@ -121,7 +121,7 @@ export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
       | T
       | Promise<T>
       | Awaiter<T>
-  ): void;
+  ): VoidFunction;
 
   cancel(): void;
 };
@@ -469,6 +469,8 @@ const collectDependencies = <T>(
   });
 };
 
+const noop = () => {};
+
 const createAtom: CreateAtom = (...args: any[]): any => {
   const allListeners = {
     emit: createCallbackGroup(),
@@ -636,7 +638,9 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         }
       );
     }
-    if (storage.state === nextState) return;
+
+    if (storage.state === nextState) return noop;
+
     if (isPromiseLike(nextState)) {
       let token: any;
 
@@ -660,10 +664,15 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       changeStatus(true, undefined, storage.state);
       token = storage.changeToken;
 
-      return;
+      return () => {
+        if (token !== storage.changeToken) return;
+        atom.cancel();
+      };
     }
 
     changeStatus(false, undefined, nextState);
+
+    return noop;
   };
 
   const atom = {
@@ -710,6 +719,8 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     },
     cancel() {
       if (!storage.loading) return;
+      // force token changed
+      storage.changeToken = {};
       changeStatus(false, undefined, storage.state);
     },
   };
