@@ -11,15 +11,30 @@ type ComponentType<P> =
   | (new (props: P) => any);
 
 type Styled = {
+  /**
+   * create styled component with custom style combiner
+   */
   <P, S>(
     component: Component<P> | FunctionComponent<P> | (new (props: P) => any),
     builder: StyleBuilder<S, P>,
     combinder: StyleCombiner<S, any>
   ): FC<P>;
+
+  /**
+   * create styled web component
+   * @param component
+   * @param builder
+   */
   web<P, S>(
     component: Component<P> | FunctionComponent<P> | (new (props: P) => any),
     builder: StyleBuilder<S, P>
   ): FC<P>;
+
+  /**
+   * create styled native component
+   * @param component
+   * @param builder
+   */
   native<P, S>(
     component: Component<P> | FunctionComponent<P> | (new (props: P) => any),
     builder: StyleBuilder<S, P>
