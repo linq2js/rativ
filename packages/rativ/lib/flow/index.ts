@@ -58,7 +58,10 @@ export type FlowContext = Cancellable & {
   allSettled<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
   fork<A extends any[], R = void>(flow: Flow<A, R>, ...args: A): Task<R>;
 
-  call<A extends any[], R>(flow: Flow<A, R>, ...args: A): R;
+  call<A extends any[], R, F extends Flow<A, R>>(
+    flow: F,
+    ...args: A
+  ): ReturnType<F>;
 
   callback<A extends any[]>(fn: (...args: A) => void): (...args: A) => void;
 
