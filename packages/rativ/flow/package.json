@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/flow/index.js",
+  "types": "../dist/tsc/flow/index.d.ts"
+}

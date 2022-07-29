@@ -13,14 +13,14 @@
   "directories": {
     "lib": "lib",
     "mutation": "mutation",
-    "signal": "signal",
+    "flow": "flow",
     "styled": "styled"
   },
   "files": [
     "lib",
     "mutation",
     "hydration",
-    "signal",
+    "flow",
     "styled",
     "dist/tsc"
   ],
@@ -38,7 +38,8 @@
     "immutable",
     "state",
     "state management",
-    "styled"
+    "styled",
+    "flow"
   ],
   "peerDependenciesMeta": {},
   "scripts": {

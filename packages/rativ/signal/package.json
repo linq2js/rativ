@@ -1,4 +1,0 @@
-{
-  "main": "../dist/tsc/signal/index.js",
-  "types": "../dist/tsc/signal/index.d.ts"
-}
