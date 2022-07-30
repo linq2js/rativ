@@ -15,6 +15,7 @@ export type Awaitable<T = void> = {
 
 export type Emittable<T = void> = Awaitable<T> & {
   emit(payload: T): void;
+  clear(): void;
 };
 
 export type Cancellable = {
@@ -161,9 +162,14 @@ export type Signal<T = void> = Awaitable & {
   payload(): T;
 };
 
+export type SignalEmitter<T> = (
+  emit: (payload: T) => void,
+  end: VoidFunction
+) => VoidFunction | void;
+
 export type CreateSignal = {
-  (): Signal<void>;
-  <T>(): Signal<T>;
+  <T = void>(): Signal<T>;
+  <T = void>(emitter: SignalEmitter<T>): Signal<T>;
 };
 
 const isAwaitableProp = "$$awaitable";
@@ -204,12 +210,15 @@ const createCancellable = (onCancel?: VoidFunction): Cancellable => {
   );
 };
 
-const createSignal: CreateSignal = () => {
+const createSignal: CreateSignal = (emitter?: SignalEmitter<void>) => {
   const emittable = createEmittable();
   let payload: any;
 
-  return Object.assign(
+  const signal: Signal = Object.assign(
     (value: any) => {
+      if (emitter) {
+        throw new Error("Cannot emit the signal manually");
+      }
       payload = value;
       emittable.emit();
     },
@@ -220,6 +229,18 @@ const createSignal: CreateSignal = () => {
       on: emittable.on,
     }
   );
+
+  if (emitter) {
+    let dispose: VoidFunction | void;
+    dispose = emitter(emittable.emit, () => {
+      if (typeof dispose === "function") {
+        dispose();
+      }
+      emittable.clear();
+    });
+  }
+
+  return signal;
 };
 
 const createEmittable = <T = void>(): Emittable<T> => {
@@ -228,6 +249,7 @@ const createEmittable = <T = void>(): Emittable<T> => {
     {
       on: callbacks.add,
       emit: callbacks.call,
+      clear: callbacks.clear,
     },
     {
       [isEmittableProp]: true,

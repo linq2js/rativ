@@ -424,3 +424,16 @@ test("infinite", async () => {
   await delay();
   expect(count).toBe(3);
 });
+
+test("custom emitter", () => {
+  let count = 0;
+  const external = signal();
+  const mouseMove = signal(external.on);
+  mouseMove.on(() => {
+    count++;
+  });
+  external();
+  external();
+  external();
+  expect(count).toBe(3);
+});
