@@ -173,3 +173,37 @@ test("cancel update", async () => {
   await delay(15);
   expect(count.state).toBe(0);
 });
+
+test("helpers", () => {
+  const atom1 = atom(0, {
+    helpers: { increment: ([, set], step = 1) => set((prev) => prev + step) },
+  });
+  expect(atom1.state).toBe(0);
+  atom1.increment();
+  expect(atom1.state).toBe(1);
+  atom1.increment(2);
+  expect(atom1.state).toBe(3);
+
+  const atom2 = atom(() => atom1.state, {
+    helpers: { increment: ([, set], step = 1) => set((prev) => prev + step) },
+  });
+  expect(atom2.state).toBe(3);
+  atom1.increment();
+  expect(atom2.state).toBe(4);
+  atom1.increment(2);
+  expect(atom2.state).toBe(6);
+
+  const atom3 = atom(
+    0,
+    (state, action: "increment") =>
+      action === "increment" ? state + 1 : state,
+    {
+      helpers: {
+        increment: ([, emit]) => emit("increment"),
+      },
+    }
+  );
+  expect(atom3.state).toBe(0);
+  atom3.increment();
+  expect(atom3.state).toBe(1);
+});

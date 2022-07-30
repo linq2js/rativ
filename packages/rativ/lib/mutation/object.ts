@@ -1,6 +1,6 @@
 import { Mutation, NoInfer, Nullable } from "../main";
 
-export const nonNull = <T>(
+const nonNull = <T>(
   defaultValue: () => NoInfer<T>,
   ...mutations: Mutation<NoInfer<T>>[]
 ): Mutation<Nullable<T>, T> => {
@@ -16,7 +16,7 @@ export const nonNull = <T>(
   };
 };
 
-export const prop = <T, P extends keyof T>(
+const prop = <T, P extends keyof T>(
   name: P,
   ...mutations: Mutation<T[P]>[]
 ): Mutation<T> => {
@@ -28,7 +28,7 @@ export const prop = <T, P extends keyof T>(
   };
 };
 
-export const swap =
+const swap =
   <T, P extends keyof T>(from: P, to: P): Mutation<T> =>
   (prev) => {
     if (!prev) return prev;
@@ -43,7 +43,7 @@ export const swap =
     return next;
   };
 
-export const unset =
+const unset =
   <T, P extends keyof T>(...props: P[]): Mutation<T> =>
   (prev) => {
     if (!prev) return prev;
@@ -58,3 +58,5 @@ export const unset =
     });
     return next;
   };
+
+export { nonNull, unset, swap, prop };

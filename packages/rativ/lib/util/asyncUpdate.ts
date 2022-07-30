@@ -5,7 +5,7 @@ export type Updater<T, A extends any[]> = {
   cancel(): void;
 };
 
-export const asyncUpdate = <T, A extends any[]>(
+const asyncUpdate = <T, A extends any[]>(
   current: T,
   getSnapshot: () => any,
   dispatchUpdate: (...args: A) => T
@@ -28,3 +28,5 @@ export const asyncUpdate = <T, A extends any[]>(
     cancel,
   };
 };
+
+export { asyncUpdate };

@@ -1,6 +1,45 @@
 import { Mutation, Nullable } from "../main";
 
-export const item = <T>(
+export type Move = {
+  <
+    T extends Nullable<any[]>,
+    I extends T extends Nullable<Array<infer I>> ? I : never
+  >(
+    to: number,
+    predicate: (item: I, index: number) => boolean
+  ): Mutation<T>;
+  <T extends Nullable<any[]>>(to: number, indices: number[]): Mutation<T>;
+};
+
+export type Compare<T> = (a: T, b: T) => number;
+
+export type SortBuilder<T> = {
+  add(...compareFns: Compare<T>[]): SortBuilder<T>;
+  asc<P extends keyof T>(prop: P, compare?: Compare<T[P]>): SortBuilder<T>;
+  desc<P extends keyof T>(prop: P, compare?: Compare<T[P]>): SortBuilder<T>;
+  asc<R>(selector: (value: T) => R, compare?: Compare<R>): SortBuilder<T>;
+  desc<R>(selector: (value: T) => R, compare?: Compare<R>): SortBuilder<T>;
+};
+
+export type ExcludeInclude = {
+  <T extends Nullable<any[]>>(indices: number[]): Mutation<T>;
+  <T extends Nullable<any[]>>(indices: number[], count: number): Mutation<T>;
+  <
+    T extends Nullable<any[]>,
+    I extends T extends Nullable<Array<infer I>> ? I : never
+  >(
+    predicate: (item: I, index: number) => boolean
+  ): Mutation<T>;
+  <
+    T extends Nullable<any[]>,
+    I extends T extends Nullable<Array<infer I>> ? I : never
+  >(
+    predicate: (item: I, index: number) => boolean,
+    count: number
+  ): Mutation<T>;
+};
+
+const item = <T>(
   predicate: (item: T, index: number) => boolean,
   ...mutations: Mutation<T>[]
 ): Mutation<Nullable<T[]>> => {
@@ -23,45 +62,27 @@ export const item = <T>(
   };
 };
 
-export const push = <T>(...values: T[]): Mutation<Nullable<T[]>, T[]> => {
+const push = <T>(...values: T[]): Mutation<Nullable<T[]>, T[]> => {
   return (prev) => (prev ?? []).concat(values);
 };
 
-export const unshift = <T>(...values: T[]): Mutation<Nullable<T[]>, T[]> => {
+const unshift = <T>(...values: T[]): Mutation<Nullable<T[]>, T[]> => {
   return (prev) => values.concat(prev ?? []);
 };
 
-export const pop = <T>(): Mutation<T> => {
+const pop = <T>(): Mutation<T> => {
   return (prev) =>
     Array.isArray(prev) && prev.length
       ? (prev.slice(0, prev.length - 1) as unknown as T)
       : prev;
 };
 
-export const shift = <T>(): Mutation<T> => {
+const shift = <T>(): Mutation<T> => {
   return (prev) =>
     Array.isArray(prev) && prev.length ? (prev.slice(1) as unknown as T) : prev;
 };
 
-export type ExcludeInclude = {
-  <T extends Nullable<any[]>>(indices: number[]): Mutation<T>;
-  <T extends Nullable<any[]>>(indices: number[], count: number): Mutation<T>;
-  <
-    T extends Nullable<any[]>,
-    I extends T extends Nullable<Array<infer I>> ? I : never
-  >(
-    predicate: (item: I, index: number) => boolean
-  ): Mutation<T>;
-  <
-    T extends Nullable<any[]>,
-    I extends T extends Nullable<Array<infer I>> ? I : never
-  >(
-    predicate: (item: I, index: number) => boolean,
-    count: number
-  ): Mutation<T>;
-};
-
-export const exclude: ExcludeInclude = (...args: any[]): any => {
+const exclude: ExcludeInclude = (...args: any[]): any => {
   if (typeof args[0] === "function") {
     let [predicate, count = Number.MAX_VALUE] = args as [
       (item: any, index: number) => boolean,
@@ -96,7 +117,7 @@ export const exclude: ExcludeInclude = (...args: any[]): any => {
   };
 };
 
-export const include: ExcludeInclude = (...args: any[]): any => {
+const include: ExcludeInclude = (...args: any[]): any => {
   if (typeof args[0] === "function") {
     let [predicate, count = Number.MAX_VALUE] = args as [
       (item: any, index: number) => boolean,
@@ -131,7 +152,7 @@ export const include: ExcludeInclude = (...args: any[]): any => {
   };
 };
 
-export const splice =
+const splice =
   <
     T extends Nullable<any[]>,
     I extends T extends Nullable<Array<infer I>> ? I : never
@@ -153,7 +174,7 @@ export const splice =
     return copy as any;
   };
 
-export const insert = <
+const insert = <
   T extends Nullable<any[]>,
   I extends T extends Nullable<Array<infer I>> ? I : never
 >(
@@ -161,7 +182,7 @@ export const insert = <
   items: I[]
 ): Mutation<T> => splice(index, 0, items);
 
-export const slice =
+const slice =
   <T extends Nullable<any[]>>(from: number, to?: number): Mutation<T> =>
   (prev) => {
     const next = prev?.slice(from, to) ?? [];
@@ -175,16 +196,6 @@ export const slice =
     }
     return next as any;
   };
-
-export type Compare<T> = (a: T, b: T) => number;
-
-export type SortBuilder<T> = {
-  add(...compareFns: Compare<T>[]): SortBuilder<T>;
-  asc<P extends keyof T>(prop: P, compare?: Compare<T[P]>): SortBuilder<T>;
-  desc<P extends keyof T>(prop: P, compare?: Compare<T[P]>): SortBuilder<T>;
-  asc<R>(selector: (value: T) => R, compare?: Compare<R>): SortBuilder<T>;
-  desc<R>(selector: (value: T) => R, compare?: Compare<R>): SortBuilder<T>;
-};
 
 const createSortBuilder = <T>(sortFns: Compare<T>[]): SortBuilder<T> => {
   const orderBy =
@@ -224,7 +235,7 @@ const createSortBuilder = <T>(sortFns: Compare<T>[]): SortBuilder<T> => {
   };
 };
 
-export const sort =
+const sort =
   <
     T extends Nullable<any[]>,
     I extends T extends Nullable<Array<infer I>> ? I : never
@@ -250,18 +261,7 @@ export const sort =
     });
   };
 
-export type Move = {
-  <
-    T extends Nullable<any[]>,
-    I extends T extends Nullable<Array<infer I>> ? I : never
-  >(
-    to: number,
-    predicate: (item: I, index: number) => boolean
-  ): Mutation<T>;
-  <T extends Nullable<any[]>>(to: number, indices: number[]): Mutation<T>;
-};
-
-export const move: Move =
+const move: Move =
   (to: number, predicate: any) =>
   (prev: any[]): any => {
     if (!prev) return prev;
@@ -285,7 +285,23 @@ export const move: Move =
     return otherItems.filter((x) => x !== placeholder);
   };
 
-export const reverse =
+const reverse =
   <T extends Nullable<any[]>>(): Mutation<T> =>
   (prev): any =>
     prev?.length ? prev.slice().reverse() : prev;
+
+export {
+  push,
+  unshift,
+  pop,
+  sort,
+  item,
+  reverse,
+  move,
+  shift,
+  exclude,
+  include,
+  splice,
+  slice,
+  insert,
+};

@@ -17,7 +17,7 @@ export type CallbackGroup = {
   size(): number;
 };
 
-export const createCallbackGroup = (): CallbackGroup => {
+const createCallbackGroup = (): CallbackGroup => {
   const callbacks: Function[] = [];
   let called = 0;
 
@@ -51,3 +51,5 @@ export const createCallbackGroup = (): CallbackGroup => {
     },
   };
 };
+
+export { createCallbackGroup };

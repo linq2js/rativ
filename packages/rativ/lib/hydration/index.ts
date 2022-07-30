@@ -4,7 +4,7 @@ export interface HydrateOptions {
   onSave?: (key: any, state: any) => void;
 }
 
-export const hydrate = ({ state, onLoad, onSave }: HydrateOptions = {}) => {
+const hydrate = ({ state, onLoad, onSave }: HydrateOptions = {}) => {
   let hydratedState = new Map<any, any>(state ?? []);
   let allStateReady: Promise<void> | undefined;
   let stateReadyResolve: VoidFunction | undefined;
@@ -47,3 +47,5 @@ export const hydrate = ({ state, onLoad, onSave }: HydrateOptions = {}) => {
     { dehydrate }
   );
 };
+
+export { hydrate };

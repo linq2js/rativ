@@ -1,4 +1,4 @@
-export const delay = <T>(ms = 0, value?: T) => {
+const delay = <T>(ms = 0, value?: T) => {
   let timer: any;
   return Object.assign(
     new Promise<T>((resolve) => (timer = setTimeout(resolve, ms, value))),
@@ -9,3 +9,5 @@ export const delay = <T>(ms = 0, value?: T) => {
     }
   );
 };
+
+export { delay };

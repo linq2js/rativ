@@ -63,15 +63,7 @@ export type Atom<T = any> = {
    * @param listener
    */
   on(type: "status", listener: Listener<void>): VoidFunction;
-  /**
-   * get current state of the atom
-   */
-  get(): T;
-  /**
-   * get result of the selector, the selector retrieves current state of the atom
-   * @param selector
-   */
-  get<R>(selector: (state: T) => R): R;
+  readonly get: Get<T>;
   /**
    * reset atom state
    */
@@ -91,12 +83,20 @@ export type Atom<T = any> = {
   readonly state: T;
 };
 
-export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
+export type Get<T> = {
   /**
-   * get or set current state of the atom
+   * get current state of the atom
    */
-  state: T;
-  set(): Updater<
+  (): T;
+  /**
+   * get result of the selector, the selector retrieves current state of the atom
+   * @param selector
+   */
+  <R>(selector: (state: T) => R): R;
+};
+
+export type Set<T> = {
+  (): Updater<
     T,
     | Mutation<T>[]
     | [
@@ -110,18 +110,26 @@ export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
    * update current state of the atom by using specfied mutations
    * @param mutations
    */
-  set(...mutations: Mutation<T>[]): VoidFunction;
+  (...mutations: Mutation<T>[]): VoidFunction;
   /**
    * update current state of the atom
    * @param state
    */
-  set(
+  (
     state:
       | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
       | T
       | Promise<T>
       | Awaiter<T>
   ): VoidFunction;
+};
+
+export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
+  /**
+   * get or set current state of the atom
+   */
+  state: T;
+  readonly set: Set<T>;
 
   cancel(): void;
 };
@@ -141,12 +149,20 @@ export type Context = {
   abort(): void;
 };
 
+export type Emit<T, A> = {
+  /**
+   * emit an action and atom reducer will handle the action
+   * @param action
+   */
+  (action: A): EmittableAtom<T, A>;
+};
+
 export type EmittableAtom<T = any, A = void> = Atom<T> & {
   /**
    * emit an action and atom reducer will handle the action
    * @param action
    */
-  emit(action: A): EmittableAtom<T, A>;
+  readonly emit: Emit<T, A>;
   /**
    * listen action emitting event
    * @param type
@@ -155,6 +171,19 @@ export type EmittableAtom<T = any, A = void> = Atom<T> & {
   on(type: "emit", listener: Listener<T, A>): VoidFunction;
 
   cancel(): void;
+};
+
+export type AtomExtraProps<THelpers = {}> = {
+  [key in keyof THelpers]: THelpers[key] extends (
+    context: any,
+    ...args: infer A
+  ) => infer R
+    ? (...args: A) => R
+    : never;
+};
+
+export type AtomHelpers<T> = {
+  [key: string]: (context: T, ...args: any[]) => any;
 };
 
 export type AtomOptions = {
@@ -191,10 +220,20 @@ export type CreateAtom = {
     options?: AtomOptions
   ): ComputedAtom<T>;
 
+  <T, H extends AtomHelpers<[Get<T>, Set<T>]>>(
+    computeFn: (context: Context) => T | Awaiter<T>,
+    options: AtomOptions & { helpers: H }
+  ): ComputedAtom<T> & AtomExtraProps<H>;
+
   /**
    * create updatable atom
    */
   <T>(initialState: Promise<T> | T, options?: AtomOptions): UpdatableAtom<T>;
+
+  <T, H extends AtomHelpers<[Get<T>, Set<T>]>>(
+    initialState: Promise<T> | T,
+    options: AtomOptions & { helpers: H }
+  ): UpdatableAtom<T> & AtomExtraProps<H>;
 
   /**
    * create amittable atom
@@ -204,6 +243,12 @@ export type CreateAtom = {
     reducer: (state: NoInfer<T>, action: A, context: Context) => T | Awaiter<T>,
     options?: EmittableOptions<A>
   ): EmittableAtom<T, A>;
+
+  <T, H extends AtomHelpers<[Get<T>, Emit<T, A>]>, A = void>(
+    initialState: T,
+    reducer: (state: NoInfer<T>, action: A, context: Context) => T | Awaiter<T>,
+    options: EmittableOptions<A> & { helpers: H }
+  ): EmittableAtom<T, A> & AtomExtraProps<H>;
 };
 
 export type Awaiter<T> = { $$type: "awaiter"; promise: Promise<T> };
@@ -885,6 +930,22 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         }
       });
     }
+  }
+
+  const helpers = (options as any).helpers as Record<string, Function>;
+
+  if (helpers) {
+    const context = [atom.get, (atom as any).emit || (atom as any).set];
+    Object.keys(helpers).forEach((key) => {
+      if (key in atom) {
+        throw new Error(`Cannot override the atom prop "${key}"`);
+      }
+
+      const helper = helpers[key];
+      (atom as any)[key] = (...args: any[]) => {
+        return helper(context, ...args);
+      };
+    });
   }
 
   onInit.call();
@@ -1615,6 +1676,7 @@ export {
   isAtom,
   createEffect as effect,
   createSlot as slot,
+  createSlot as $,
   defaultProps,
   createDirective as directive,
   createAtom as atom,

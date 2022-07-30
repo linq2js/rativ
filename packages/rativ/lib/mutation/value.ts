@@ -20,7 +20,7 @@ export type Add = {
   }): Mutation<Nullable<Date>>;
 };
 
-export const add: Add = (input): any => {
+const add: Add = (input): any => {
   if (typeof input === "number") {
     return (prev: Nullable<number>) => (prev || 0) + input;
   }
@@ -57,5 +57,6 @@ export const add: Add = (input): any => {
   };
 };
 
-export const toggle = (): Mutation<Nullable<boolean>, boolean> => (prev) =>
-  !prev;
+const toggle = (): Mutation<Nullable<boolean>, boolean> => (prev) => !prev;
+
+export { add, toggle };
