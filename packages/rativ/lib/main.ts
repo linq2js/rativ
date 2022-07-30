@@ -932,7 +932,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     }
   }
 
-  const helpers = (options as any).helpers as Record<string, Function>;
+  const helpers = (options as any)?.helpers as Record<string, Function>;
 
   if (helpers) {
     const context = [atom.get, (atom as any).emit || (atom as any).set];
