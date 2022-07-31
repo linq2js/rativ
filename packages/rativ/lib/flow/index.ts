@@ -37,7 +37,9 @@ export type WaitResult<T> = {
     : never;
 };
 
-export type SignalList = Signal | (Signal | SignalList)[];
+export type AnySignal<T = void> = Signal<T> | CustomSignal<T>;
+
+export type SignalList = AnySignal | (AnySignal | SignalList)[];
 
 export type AwaitableMap = Record<
   string,
@@ -71,10 +73,10 @@ export type FlowContext = Cancellable & {
   delay<T>(ms: number, value: T): Promise<T>;
 
   when<T>(promise: Promise<T>): Promise<T>;
-  when<T>(signal: Signal<T>): Promise<T>;
+  when<T>(signal: AnySignal<T>): Promise<T>;
 
   on<T, A extends any[]>(
-    signal: Signal<T>,
+    signal: AnySignal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -86,7 +88,7 @@ export type FlowContext = Cancellable & {
 
   debounce<T, A extends any[]>(
     ms: number,
-    signal: Signal<T>,
+    signal: AnySignal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -99,7 +101,7 @@ export type FlowContext = Cancellable & {
 
   throttle<T, A extends any[]>(
     ms: number,
-    signal: Signal<T>,
+    signal: AnySignal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -111,7 +113,7 @@ export type FlowContext = Cancellable & {
   ): ContinuousTask;
 
   sequential<T, A extends any[]>(
-    signal: Signal<T>,
+    signal: AnySignal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -122,7 +124,7 @@ export type FlowContext = Cancellable & {
   ): ContinuousTask;
 
   restartable<T, A extends any[]>(
-    signal: Signal<T>,
+    signal: AnySignal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -133,7 +135,7 @@ export type FlowContext = Cancellable & {
   ): ContinuousTask;
 
   droppable<T, A extends any[]>(
-    signal: Signal<T>,
+    signal: AnySignal<T>,
     flow: Flow<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -434,7 +436,7 @@ const throwError = (context: FlowContext, error: any) => {
 
 const forEachSignalList = (
   signals: SignalList,
-  callback: (signal: Signal<any>) => void
+  callback: (signal: AnySignal<any>) => void
 ) => {
   if (isSignal(signals)) {
     callback(signals);
@@ -448,7 +450,7 @@ const listen = (
   parentContext: FlowContext,
   callback: (
     context: FlowContext,
-    signal: Signal<any>,
+    signal: AnySignal<any>,
     prevTask: Task<any> | undefined
   ) => void,
   mode?: "sequential" | "droppable"
@@ -458,12 +460,12 @@ const listen = (
   return Object.assign(
     parentContext.fork(async (listenContext) => {
       const cleanup = createCallbackGroup();
-      const signalQueue: Signal<any>[] = [];
+      const signalQueue: AnySignal<any>[] = [];
       let done: Function | undefined;
       let currentTask: Task<any> | undefined;
       let taskDoneHandled = false;
       let times = 0;
-      const createForkedTask = (signal: Signal<any>) =>
+      const createForkedTask = (signal: AnySignal<any>) =>
         listenContext.fork(callback, signal.payload(), currentTask);
       const stopIfPossible = () => {
         if (times < maxTimes) return;
