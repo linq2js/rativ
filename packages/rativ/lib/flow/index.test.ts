@@ -428,7 +428,7 @@ test("infinite", async () => {
 test("custom emitter", () => {
   let count = 0;
   const external = signal();
-  const mouseMove = signal(external.on);
+  const mouseMove = signal(external.on).start();
   mouseMove.on(() => {
     count++;
   });
@@ -436,4 +436,14 @@ test("custom emitter", () => {
   external();
   external();
   expect(count).toBe(3);
+  mouseMove.pause();
+  external();
+  external();
+  external();
+  expect(count).toBe(3);
+  mouseMove.start();
+  external();
+  external();
+  external();
+  expect(count).toBe(6);
 });

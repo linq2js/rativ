@@ -162,6 +162,17 @@ export type Signal<T = void> = Awaitable & {
   payload(): T;
 };
 
+export type SignalStatus = "idle" | "active" | "pausing";
+
+export type CustomSignal<T> = Awaitable & {
+  payload(): T;
+  status(): SignalStatus;
+  pause(): CustomSignal<T>;
+  start(): CustomSignal<T>;
+  start(flush: boolean): CustomSignal<T>;
+  end(): CustomSignal<T>;
+};
+
 export type SignalEmitter<T> = (
   emit: (payload: T) => void,
   end: VoidFunction
@@ -169,7 +180,7 @@ export type SignalEmitter<T> = (
 
 export type CreateSignal = {
   <T = void>(): Signal<T>;
-  <T = void>(emitter: SignalEmitter<T>): Signal<T>;
+  <T = void>(emitter: SignalEmitter<T>): CustomSignal<T>;
 };
 
 const isAwaitableProp = "$$awaitable";
@@ -210,7 +221,7 @@ const createCancellable = (onCancel?: VoidFunction): Cancellable => {
   );
 };
 
-const createSignal: CreateSignal = (emitter?: SignalEmitter<void>) => {
+const createSignal: CreateSignal = (emitter?: SignalEmitter<void>): any => {
   const emittable = createEmittable();
   let payload: any;
 
@@ -231,13 +242,54 @@ const createSignal: CreateSignal = (emitter?: SignalEmitter<void>) => {
   );
 
   if (emitter) {
+    let status: SignalStatus = "idle";
     let dispose: VoidFunction | void;
-    dispose = emitter(emittable.emit, () => {
+    const queue: any[] = [];
+    const end = () => {
+      if (status === "idle") {
+        return signal;
+      }
+      status = "idle";
+      queue.length = 0;
       if (typeof dispose === "function") {
         dispose();
       }
       emittable.clear();
-    });
+      return signal;
+    };
+    const emit = (payload: void) => {
+      if (status !== "active") {
+        if (status === "pausing") {
+          queue.push(payload);
+        }
+        return;
+      }
+      emittable.emit(payload);
+    };
+    const start = (flush?: boolean) => {
+      if (status === "active") {
+        return signal;
+      }
+      const q = queue.slice();
+      queue.length = 0;
+      if (status === "pausing") {
+        status = "active";
+        flush && q.forEach(emittable.emit);
+      } else {
+        status = "active";
+        dispose = emitter(emit, end);
+      }
+      return signal;
+    };
+    const pause = () => {
+      if (status !== "active") {
+        return signal;
+      }
+      status = "pausing";
+      return signal;
+    };
+
+    return Object.assign(signal, { start, status: () => status, pause, end });
   }
 
   return signal;
