@@ -29,3 +29,12 @@ test("delete", () => {
   sumFamily.delete(1, 2);
   expect(sumFamily.has(1, 2)).toBe(false);
 });
+
+test("set", () => {
+  const counters = family((initial: number) => atom(initial));
+  expect(counters.get(1).state).toBe(1);
+  expect(counters.get(2).state).toBe(2);
+  counters.set((prev) => prev + 1);
+  expect(counters.get(1).state).toBe(2);
+  expect(counters.get(2).state).toBe(3);
+});

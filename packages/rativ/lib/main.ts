@@ -456,6 +456,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
     Object.assign(atom, {
       set,
+      mutate: set,
       reset() {
         storage.state = undefined;
         invalidateState();
@@ -519,6 +520,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       Object.defineProperty(atom, "state", { get, set });
       Object.assign(atom, {
         set,
+        mutate: set,
         reset() {
           set(initialState);
         },
@@ -646,9 +648,17 @@ const keyOf: KeyOf = (obj: Record<string, unknown>, exclude?: string[]) => {
   return Object.keys(obj) as any;
 };
 
+export type AtomFamily<A extends any[], T> = {
+  get(...args: A): T;
+  delete(...args: A): T | undefined;
+  has(...args: A): boolean;
+  forEach(callback: (item: T) => void): void;
+  clear(): void;
+} & (T extends UpdatableAtom<infer V> ? { readonly set: SetFn<V> } : {});
+
 const createAtomFamily = <A extends any[], T = unknown>(
   createFn: (...args: A) => T
-) => {
+): AtomFamily<A, T> => {
   type Item = Map<any, Item> & { data?: T };
   type FindItem = {
     (args: A, createIfNotExist: true): [Item, VoidFunction];
@@ -676,6 +686,17 @@ const createAtomFamily = <A extends any[], T = unknown>(
     return [current, remove];
   };
 
+  const forEach = (callback: (data: T) => void) => {
+    const walker = (item: Item) => {
+      if (item.data) {
+        callback(item.data);
+      }
+      item.forEach(walker);
+    };
+
+    walker(root);
+  };
+
   return {
     get(...args: A) {
       const [item] = findItem(args, true);
@@ -686,6 +707,7 @@ const createAtomFamily = <A extends any[], T = unknown>(
       }
       return data;
     },
+    forEach,
     clear() {
       root.clear();
     },
@@ -698,7 +720,22 @@ const createAtomFamily = <A extends any[], T = unknown>(
       remove();
       return item?.data;
     },
-  };
+    set(...args: any[]) {
+      const cancel = createCallbackGroup();
+
+      forEach((data: any) => {
+        const setFn = data.set;
+        if (typeof setFn === "function") {
+          const cancelFn = setFn(...args);
+          if (typeof cancelFn === "function") {
+            cancel.add(cancelFn);
+          }
+        }
+      });
+
+      return cancel.call;
+    },
+  } as any;
 };
 
 const isAwaiter = <T>(value: any): value is Awaiter<T> => {

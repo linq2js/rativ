@@ -79,11 +79,13 @@ export type SetFn<T> = {
         | Awaiter<T>
       ]
   >;
+
   /**
    * update current state of the atom by using specfied mutations
    * @param mutations
    */
   (...mutations: Mutation<T>[]): VoidFunction;
+
   /**
    * update current state of the atom
    * @param state
@@ -106,6 +108,12 @@ export type UpdatableAtom<T = any> = GetFn<T> &
     readonly set: SetFn<T>;
 
     cancel(): void;
+
+    /**
+     * update current state of the atom by using specfied mutations
+     * @param mutations
+     */
+    mutate(...mutations: Mutation<T>[]): VoidFunction;
   };
 
 export type Context = {
@@ -213,3 +221,5 @@ export type KeyOf = {
   <T, E extends keyof T>(obj: T, exclude: E[]): Exclude<keyof T, E>[];
   <T>(obj: T): (keyof T)[];
 };
+
+export type CompareFn<T = any> = (a: T, b: T) => boolean;

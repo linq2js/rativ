@@ -1,3 +1,4 @@
+import { atom } from "../lib/main";
 import {
   include,
   exclude,
@@ -10,7 +11,20 @@ import {
   sort,
   move,
   mutate,
+  item,
 } from "../lib/mutation";
+
+test("array item", () => {
+  const value = atom([{ current: 1 }]);
+
+  value.mutate(
+    item(
+      () => true,
+      prop("current", (prev) => prev + 1)
+    )
+  );
+  expect(value.state[0].current).toBe(2);
+});
 
 test("push with optional prop", () => {
   const result = mutate(

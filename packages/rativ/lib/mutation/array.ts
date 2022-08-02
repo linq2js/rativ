@@ -40,15 +40,21 @@ export type ExcludeInclude = {
 };
 
 const item = <T>(
-  predicate: (item: T, index: number) => boolean,
+  predicate: boolean | number[] | ((item: T, index: number) => boolean),
   ...mutations: Mutation<T>[]
-): Mutation<Nullable<T[]>> => {
-  return (prev) => {
+): Mutation<Nullable<T[]>, T[]> => {
+  return (prev): any => {
     if (!prev || !mutations.length) return prev;
     let hasChange = false;
     const next: T[] = [];
+    const predicateWrapper =
+      typeof predicate === "boolean"
+        ? () => predicate
+        : typeof predicate === "function"
+        ? predicate
+        : (_: T, index: number) => predicate.includes(index);
     prev.forEach((prevItem, index) => {
-      if (predicate(prevItem, index)) {
+      if (predicateWrapper(prevItem, index)) {
         const nextItem = mutations.reduce((p, m) => m(p), prevItem);
         if (nextItem !== prevItem) {
           hasChange = true;
