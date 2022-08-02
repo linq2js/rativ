@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/saga/index.js",
+  "types": "../dist/tsc/saga/index.d.ts"
+}
