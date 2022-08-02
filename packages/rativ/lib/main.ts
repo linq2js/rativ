@@ -17,18 +17,19 @@ import {
   Awaiter,
   ComputedAtom,
   Context,
-  Emit,
+  EmitFn,
   EmittableAtom,
   EmittableOptions,
-  Get,
+  GetFn,
   KeyOf,
   Listener,
   NoInfer,
   UpdatableAtom,
   Wait,
-  Set,
+  SetFn,
 } from "./util/commonTypes";
 
+const isAtomProp = "$$atom";
 export type CreateAtom = {
   /**
    * create computed atom
@@ -38,7 +39,7 @@ export type CreateAtom = {
     options?: AtomOptions
   ): ComputedAtom<T>;
 
-  <T, H extends AtomHelpers<[Get<T>, Set<T>]>>(
+  <T, H extends AtomHelpers<[GetFn<T>, SetFn<T>]>>(
     computeFn: (context: Context) => T | Awaiter<T>,
     options: AtomOptions & { helpers: H }
   ): ComputedAtom<T> & AtomExtraProps<H>;
@@ -48,7 +49,7 @@ export type CreateAtom = {
    */
   <T>(initialState: Promise<T> | T, options?: AtomOptions): UpdatableAtom<T>;
 
-  <T, H extends AtomHelpers<[Get<T>, Set<T>]>>(
+  <T, H extends AtomHelpers<[GetFn<T>, SetFn<T>]>>(
     initialState: Promise<T> | T,
     options: AtomOptions & { helpers: H }
   ): UpdatableAtom<T> & AtomExtraProps<H>;
@@ -62,7 +63,7 @@ export type CreateAtom = {
     options?: EmittableOptions<A>
   ): EmittableAtom<T, A>;
 
-  <T, H extends AtomHelpers<[Get<T>, Emit<T, A>]>, A = void>(
+  <T, H extends AtomHelpers<[GetFn<T>, EmitFn<T, A>]>, A = void>(
     initialState: T,
     reducer: (state: NoInfer<T>, action: A, context: Context) => T | Awaiter<T>,
     options: EmittableOptions<A> & { helpers: H }
@@ -319,21 +320,8 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     return noop;
   };
 
-  const atom = {
-    get name() {
-      return options?.name;
-    },
-    get task() {
-      return storage.task;
-    },
-    get error() {
-      handleDependency(allListeners.status.add);
-      return storage.error;
-    },
-    get loading() {
-      handleDependency(allListeners.status.add);
-      return storage.loading;
-    },
+  const atom = Object.assign(get, {
+    [isAtomProp]: true,
     get,
     on,
     abort,
@@ -367,7 +355,24 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       storage.changeToken = {};
       changeStatus(false, undefined, storage.state);
     },
-  };
+  });
+
+  Object.defineProperties(atom, {
+    key: { get: () => options?.key },
+    task: { get: () => storage.task },
+    error: {
+      get: () => {
+        handleDependency(allListeners.status.add);
+        return storage.error;
+      },
+    },
+    loading: {
+      get: () => {
+        handleDependency(allListeners.status.add);
+        return storage.loading;
+      },
+    },
+  });
 
   onInit.add(() => {
     if (currentScope?.onAtomCreated) {
@@ -553,12 +558,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 };
 
 const isAtom = <T>(value: any): value is Atom<T> => {
-  return (
-    value &&
-    typeof value === "object" &&
-    typeof value.on === "function" &&
-    typeof value.get === "function"
-  );
+  return value && value[isAtomProp];
 };
 
 const createWatcher: Watch = (watchFn, options) => {

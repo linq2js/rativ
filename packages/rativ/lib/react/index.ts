@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Atom } from "../util/commonTypes";
+
 import { createCallbackGroup } from "../util/createCallbackGroup";
 import { collectDependencies, currentScope, scopeOfWork } from "../util/scope";
 
@@ -28,7 +28,6 @@ export type Refs<T extends Record<string, any> = {}, F = any> = {
 };
 
 export type CreateSlot = {
-  (atom: Atom): ReactNode;
   (computeFn: () => any): ReactNode;
 };
 

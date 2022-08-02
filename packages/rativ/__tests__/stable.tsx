@@ -70,14 +70,14 @@ test("rerender", async () => {
     () => {
       return wait(delay(10), () => 100);
     },
-    { name: "count" }
+    { key: "count" }
   );
-  const factor = atom(1, { name: "factor" });
+  const factor = atom(1, { key: "factor" });
   const result = atom(
     () => {
       return wait([count, factor], ([count, factor]) => count * factor);
     },
-    { name: "result" }
+    { key: "result" }
   );
   result.on(() => {
     updateCount++;

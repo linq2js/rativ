@@ -8,11 +8,11 @@ export type Nullable<T> = T | undefined | null;
 
 export type Mutation<T, R = T> = (prev: T) => R;
 
-export type Atom<T = any> = {
+export type Atom<T = any> = GetFn<T> & {
   /**
    * name of atom
    */
-  readonly name: string | undefined;
+  readonly key: string | undefined;
   /**
    * get loading status of the atom
    */
@@ -36,7 +36,7 @@ export type Atom<T = any> = {
    * @param listener
    */
   on(type: "status", listener: Listener<void>): VoidFunction;
-  readonly get: Get<T>;
+  readonly get: GetFn<T>;
   /**
    * reset atom state
    */
@@ -56,7 +56,7 @@ export type Atom<T = any> = {
   readonly state: T;
 };
 
-export type Get<T> = {
+export type GetFn<T> = {
   /**
    * get current state of the atom
    */
@@ -68,7 +68,7 @@ export type Get<T> = {
   <R>(selector: (state: T) => R): R;
 };
 
-export type Set<T> = {
+export type SetFn<T> = {
   (): Updater<
     T,
     | Mutation<T>[]
@@ -97,15 +97,16 @@ export type Set<T> = {
   ): VoidFunction;
 };
 
-export type UpdatableAtom<T = any> = Omit<Atom<T>, "state"> & {
-  /**
-   * get or set current state of the atom
-   */
-  state: T;
-  readonly set: Set<T>;
+export type UpdatableAtom<T = any> = GetFn<T> &
+  Omit<Atom<T>, "state"> & {
+    /**
+     * get or set current state of the atom
+     */
+    state: T;
+    readonly set: SetFn<T>;
 
-  cancel(): void;
-};
+    cancel(): void;
+  };
 
 export type Context = {
   /**
@@ -122,7 +123,7 @@ export type Context = {
   abort(): void;
 };
 
-export type Emit<T, A> = {
+export type EmitFn<T, A> = {
   /**
    * emit an action and atom reducer will handle the action
    * @param action
@@ -135,7 +136,7 @@ export type EmittableAtom<T = any, A = void> = Atom<T> & {
    * emit an action and atom reducer will handle the action
    * @param action
    */
-  readonly emit: Emit<T, A>;
+  readonly emit: EmitFn<T, A>;
   /**
    * listen action emitting event
    * @param type
@@ -163,7 +164,7 @@ export type AtomOptions = {
   /**
    * name of atom, for debugging purpose
    */
-  name?: string;
+  key?: string;
   /**
    * this function will be called when initializing atom
    */
