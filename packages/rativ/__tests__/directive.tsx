@@ -1,5 +1,6 @@
 import React from "react";
-import { directive, atom, stable } from "../lib/main";
+import { atom } from "../lib/main";
+import { directive, stable } from "../lib/react";
 import { fireEvent, render } from "@testing-library/react";
 
 test("click outside", () => {

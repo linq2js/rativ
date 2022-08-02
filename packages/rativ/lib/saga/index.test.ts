@@ -1,4 +1,4 @@
-import { signal, spawn, delay, Flow, FlowContext } from "./";
+import { signal, spawn, delay, Saga, SagaContext } from ".";
 
 test("signal without payload", () => {
   let count = 0;
@@ -214,7 +214,7 @@ test("race()", async () => {
 
 test("race() with flow #1", async () => {
   let cancelled = false;
-  const myFlow = async ({ delay, onCancel }: FlowContext) => {
+  const myFlow = async ({ delay, onCancel }: SagaContext) => {
     onCancel(() => (cancelled = true));
     await delay(10, 2);
     return 2;
@@ -231,7 +231,7 @@ test("race() with flow #1", async () => {
 
 test("race() with flow #2", async () => {
   let cancelled = false;
-  const myFlow = async ({ delay, onCancel }: FlowContext) => {
+  const myFlow = async ({ delay, onCancel }: SagaContext) => {
     onCancel(() => (cancelled = true));
     await delay(10, 2);
     return 2;
@@ -284,7 +284,7 @@ test("all", async () => {
 test("restartable", async () => {
   let count = 0;
   const clicked = signal();
-  const increment: Flow = async ({ delay }) => {
+  const increment: Saga = async ({ delay }) => {
     await delay(10);
     count++;
   };
@@ -305,7 +305,7 @@ test("restartable", async () => {
 test("droppable", async () => {
   let count = 0;
   const clicked = signal();
-  const increment: Flow = async ({ delay }) => {
+  const increment: Saga = async ({ delay }) => {
     await delay(10);
     count++;
   };
@@ -324,7 +324,7 @@ test("droppable", async () => {
 test("sequential", async () => {
   let count = 0;
   const clicked = signal();
-  const increment: Flow = async ({ delay }) => {
+  const increment: Saga = async ({ delay }) => {
     await delay(10);
     count++;
   };
@@ -347,14 +347,14 @@ test("search", async () => {
   const searchTermChanged = signal<string>();
   const cancelSearch = signal();
 
-  const searchUsers = async ({ delay }: FlowContext, term: string) => {
+  const searchUsers = async ({ delay }: SagaContext, term: string) => {
     logs.push("delay");
     await delay(10);
     logs.push("result:" + term);
   };
 
   const handleSearchTermChanged = async (
-    { race, fork }: FlowContext,
+    { race, fork }: SagaContext,
     term: string
   ) => {
     logs.push("handleSearchTermChanged");

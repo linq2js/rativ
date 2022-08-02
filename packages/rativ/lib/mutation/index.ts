@@ -1,4 +1,4 @@
-export type Mutation<T, R = T> = (prev: T) => R;
+import { Mutation } from "../util/commonTypes";
 
 export * from "./array";
 export * from "./object";

@@ -1,5 +1,6 @@
 import React from "react";
-import { atom, slot, stable } from "../lib/main";
+import { atom } from "../lib/main";
+import { slot, stable } from "../lib/react";
 import { act, fireEvent, render } from "@testing-library/react";
 
 test("slot with atom", () => {

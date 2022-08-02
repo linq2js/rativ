@@ -4,8 +4,8 @@ import { delay } from "../util/delay";
 
 export type TaskStatus = "idle" | "running" | "error" | "success" | "cancelled";
 
-export type Flow<A extends any[] = any[], R = any> = (
-  context: FlowContext,
+export type Saga<A extends any[] = any[], R = any> = (
+  context: SagaContext,
   ...args: A
 ) => R | Promise<R>;
 
@@ -32,7 +32,7 @@ export type WaitResult<T> = {
     ? AsyncResult<V>
     : T[key] extends Task<infer V>
     ? AsyncResult<V>
-    : T[key] extends Flow<any[], infer V>
+    : T[key] extends Saga<any[], infer V>
     ? AsyncResult<V>
     : never;
 };
@@ -43,7 +43,7 @@ export type SignalList = AnySignal | (AnySignal | SignalList)[];
 
 export type AwaitableMap = Record<
   string,
-  Flow<any[], any> | Awaitable | Promise<any>
+  Saga<any[], any> | Awaitable | Promise<any>
 >;
 
 export type ContinuousTask = Task & {
@@ -51,7 +51,10 @@ export type ContinuousTask = Task & {
   times(value: number): ContinuousTask;
 };
 
-export type FlowContext = Cancellable & {
+/**
+ * Saga context
+ */
+export type SagaContext = Cancellable & {
   abortController(): AbortController | undefined;
   onCancel(listener: VoidFunction): VoidFunction;
   onDispose(listener: VoidFunction): VoidFunction;
@@ -59,9 +62,9 @@ export type FlowContext = Cancellable & {
   race<T extends AwaitableMap>(awaitables: T): Promise<Partial<WaitResult<T>>>;
   all<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
   allSettled<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
-  fork<A extends any[], R = void>(flow: Flow<A, R>, ...args: A): Task<R>;
+  fork<A extends any[], R = void>(flow: Saga<A, R>, ...args: A): Task<R>;
 
-  call<A extends any[], R, F extends Flow<A, R>>(
+  call<A extends any[], R, F extends Saga<A, R>>(
     flow: F,
     ...args: A
   ): ReturnType<F>;
@@ -77,71 +80,71 @@ export type FlowContext = Cancellable & {
 
   on<T, A extends any[]>(
     signal: AnySignal<T>,
-    flow: Flow<[T, ...A]>,
+    flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   on<A extends any[]>(
     signals: SignalList,
-    flow: Flow<[any, ...A]>,
+    flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   debounce<T, A extends any[]>(
     ms: number,
     signal: AnySignal<T>,
-    flow: Flow<[T, ...A]>,
+    flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   debounce<A extends any[]>(
     ms: number,
     signals: SignalList,
-    flow: Flow<[any, ...A]>,
+    flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   throttle<T, A extends any[]>(
     ms: number,
     signal: AnySignal<T>,
-    flow: Flow<[T, ...A]>,
+    flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   throttle<A extends any[]>(
     ms: number,
     signals: SignalList,
-    flow: Flow<[any, ...A]>,
+    flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   sequential<T, A extends any[]>(
     signal: AnySignal<T>,
-    flow: Flow<[T, ...A]>,
+    flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   sequential<A extends any[]>(
     signals: SignalList,
-    flow: Flow<[any, ...A]>,
+    flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   restartable<T, A extends any[]>(
     signal: AnySignal<T>,
-    flow: Flow<[T, ...A]>,
+    flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   restartable<A extends any[]>(
     signals: SignalList,
-    flow: Flow<[any, ...A]>,
+    flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   droppable<T, A extends any[]>(
     signal: AnySignal<T>,
-    flow: Flow<[T, ...A]>,
+    flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   droppable<A extends any[]>(
     signals: SignalList,
-    flow: Flow<[any, ...A]>,
+    flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
@@ -313,8 +316,8 @@ const createEmittable = <T = void>(): Emittable<T> => {
 };
 
 const createTask = <T = void>(
-  fn: (context: FlowContext) => T | Promise<T>,
-  parentContext?: FlowContext
+  fn: (context: SagaContext) => T | Promise<T>,
+  parentContext?: SagaContext
 ): Task<T> => {
   let status: TaskStatus = "idle";
   let error: any;
@@ -422,7 +425,7 @@ const createTask = <T = void>(
 };
 
 const spawn = <A extends any[] = [], R = any>(
-  flow: Flow<A, R>,
+  flow: Saga<A, R>,
   ...args: A
 ): Task<R> => {
   const task = createTask((context) => flow(context, ...args));
@@ -430,7 +433,7 @@ const spawn = <A extends any[] = [], R = any>(
   return task;
 };
 
-const throwError = (context: FlowContext, error: any) => {
+const throwError = (context: SagaContext, error: any) => {
   (context as any).throwError(error);
 };
 
@@ -447,9 +450,9 @@ const forEachSignalList = (
 
 const listen = (
   signals: SignalList,
-  parentContext: FlowContext,
+  parentContext: SagaContext,
   callback: (
-    context: FlowContext,
+    context: SagaContext,
     signal: AnySignal<any>,
     prevTask: Task<any> | undefined
   ) => void,
@@ -533,7 +536,7 @@ const isAbortControllerSupported = typeof AbortController !== "undefined";
 const createTaskContext = (
   handleError: (error: any) => void,
   handleForkedTask: (task: Task<any>) => void
-): FlowContext => {
+): SagaContext => {
   let disposed = false;
   let abortController: AbortController | undefined;
   const onCancel = createCallbackGroup();
@@ -584,7 +587,7 @@ const createTaskContext = (
 
       Object.keys(awaitables).forEach((key) => {
         awaitableCount++;
-        const awaitable: Awaitable | Promise<any> | Flow = awaitables[key];
+        const awaitable: Awaitable | Promise<any> | Saga = awaitables[key];
 
         if (isPromiseLike(awaitable)) {
           const task = createTask(() => awaitable);
@@ -611,7 +614,7 @@ const createTaskContext = (
     });
   };
 
-  const context: FlowContext = {
+  const context: SagaContext = {
     ...cancellable,
     onCancel: onCancel.add,
     onDispose: onDispose.add,
@@ -699,12 +702,12 @@ const createTaskContext = (
     allSettled(awaitables) {
       return wait(awaitables, "allSettled");
     },
-    on(signals: SignalList, flow: Flow, ...args: any[]) {
+    on(signals: SignalList, flow: Saga, ...args: any[]) {
       return listen(signals, context, (context, signal) =>
         flow(context, signal, ...args)
       );
     },
-    debounce(ms: number, signals: SignalList, flow: Flow, ...args: any[]) {
+    debounce(ms: number, signals: SignalList, flow: Saga, ...args: any[]) {
       let timer: any;
       return listen(signals, context, (context, signal, prevTask) => {
         prevTask?.cancel();
@@ -715,7 +718,7 @@ const createTaskContext = (
         }, ms);
       });
     },
-    throttle(ms: number, signals: SignalList, flow: Flow, ...args: any[]) {
+    throttle(ms: number, signals: SignalList, flow: Saga, ...args: any[]) {
       let lastExecution = 0;
       return listen(signals, context, (context, signal) => {
         const now = Date.now();
@@ -724,7 +727,7 @@ const createTaskContext = (
         return flow(context, signal, ...args);
       });
     },
-    sequential(signals: SignalList, flow: Flow, ...args: any[]) {
+    sequential(signals: SignalList, flow: Saga, ...args: any[]) {
       return listen(
         signals,
         context,
@@ -732,13 +735,13 @@ const createTaskContext = (
         "sequential"
       );
     },
-    restartable(signals: SignalList, flow: Flow, ...args: any[]) {
+    restartable(signals: SignalList, flow: Saga, ...args: any[]) {
       return listen(signals, context, (context, signal, prevTask) => {
         prevTask?.cancel();
         return flow(context, signal, ...args);
       });
     },
-    droppable(signals: SignalList, flow: Flow, ...args: any[]) {
+    droppable(signals: SignalList, flow: Saga, ...args: any[]) {
       return listen(
         signals,
         context,
@@ -780,6 +783,7 @@ export {
   forever,
   createSignal as signal,
   createTask as task,
+  SagaContext as SC,
   delay,
   spawn,
   isTask,

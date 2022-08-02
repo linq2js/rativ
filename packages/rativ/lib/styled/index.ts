@@ -1,5 +1,5 @@
 import { Component, createElement, FC, FunctionComponent } from "react";
-import { stable } from "../main";
+import { stable } from "../react";
 
 type StyleCombiner<S, R> = (styles: S[], props: Record<string, any>) => R;
 

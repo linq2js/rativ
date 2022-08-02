@@ -1,14 +1,7 @@
 import React, { Suspense } from "react";
 import { act, fireEvent, render } from "@testing-library/react";
-import {
-  defaultProps,
-  delay,
-  Atom,
-  atom,
-  slot,
-  stable,
-  wait,
-} from "../lib/main";
+import { delay, Atom, atom, wait } from "../lib/main";
+import { defaultProps, slot, stable } from "../lib/react";
 
 test("default props", () => {
   const Component = stable((props: { message?: string }) => {

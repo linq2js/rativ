@@ -13,15 +13,17 @@
   "directories": {
     "lib": "lib",
     "mutation": "mutation",
-    "flow": "flow",
-    "styled": "styled"
+    "saga": "saga",
+    "styled": "styled",
+    "react": "react"
   },
   "files": [
     "lib",
     "mutation",
     "hydration",
-    "flow",
+    "saga",
     "styled",
+    "react",
     "dist/tsc"
   ],
   "keywords": [
@@ -39,7 +41,7 @@
     "state",
     "state management",
     "styled",
-    "flow"
+    "saga"
   ],
   "peerDependenciesMeta": {},
   "scripts": {
