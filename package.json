@@ -4,7 +4,7 @@
   "scripts": {
     "build-all": "lerna run build --no-private --parallel",
     "test-all": "lerna run test --no-private --parallel",
-    "docs": "npx typedoc --tsconfig ./packages/rativ/tsconfig.json --entryPoints ./packages/rativ/lib/main.ts --out ./docs",
+    "docs": "npx typedoc",
     "publish-all": "lerna publish",
     "bootstrap": "lerna bootstrap"
   },

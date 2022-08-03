@@ -1,0 +1,14 @@
+{
+  "tsconfig": "./packages/rativ/tsconfig.json",
+  "entryPoints": [
+    "./packages/rativ/lib/main.ts",
+    "./packages/rativ/lib/saga/index.ts",
+    "./packages/rativ/lib/hydration/index.ts",
+    "./packages/rativ/lib/mutation/index.ts",
+    "./packages/rativ/lib/react/index.ts",
+    "./packages/rativ/lib/styled/index.ts",
+    "./packages/rativ/lib/api/index.ts",
+    "./packages/rativ/lib/api/rest.ts"
+  ],
+  "out": "./docs"
+}

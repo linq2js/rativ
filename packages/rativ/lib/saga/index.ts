@@ -1,6 +1,7 @@
 import { createCallbackGroup } from "../util/createCallbackGroup";
 import { isPromiseLike } from "../util/isPromiseLike";
 import { delay } from "../util/delay";
+import { Atom, isAtom } from "../main";
 
 export type TaskStatus = "idle" | "running" | "error" | "success" | "cancelled";
 
@@ -39,7 +40,9 @@ export type WaitResult<T> = {
 
 export type AnySignal<T = void> = Signal<T> | CustomSignal<T>;
 
-export type SignalList = AnySignal | (AnySignal | SignalList)[];
+export type Listenable<T = void> = Atom<T> | AnySignal<T>;
+
+export type ListenableList = Listenable<any> | Listenable<any>[];
 
 export type AwaitableMap = Record<
   string,
@@ -76,74 +79,106 @@ export type SagaContext = Cancellable & {
   delay<T>(ms: number, value: T): Promise<T>;
 
   when<T>(promise: Promise<T>): Promise<T>;
-  when<T>(signal: AnySignal<T>): Promise<T>;
+  when<T>(listenable: Listenable<T>): Promise<T>;
 
   on<T, A extends any[]>(
-    signal: AnySignal<T>,
+    atom: Atom<T>,
+    flow: Saga<[T, ...A]>,
+    ...args: A
+  ): ContinuousTask;
+  on<T, A extends any[]>(
+    listenable: Listenable<T>,
     flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   on<A extends any[]>(
-    signals: SignalList,
+    listenables: ListenableList,
     flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   debounce<T, A extends any[]>(
     ms: number,
-    signal: AnySignal<T>,
+    listenable: Listenable<T>,
+    flow: Saga<[T, ...A]>,
+    ...args: A
+  ): ContinuousTask;
+  debounce<T, A extends any[]>(
+    ms: number,
+    atom: Atom<T>,
     flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   debounce<A extends any[]>(
     ms: number,
-    signals: SignalList,
+    listenables: ListenableList,
     flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   throttle<T, A extends any[]>(
     ms: number,
-    signal: AnySignal<T>,
+    listenable: Listenable<T>,
+    flow: Saga<[T, ...A]>,
+    ...args: A
+  ): ContinuousTask;
+  throttle<T, A extends any[]>(
+    ms: number,
+    atom: Atom<T>,
     flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   throttle<A extends any[]>(
     ms: number,
-    signals: SignalList,
+    listenables: ListenableList,
     flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   sequential<T, A extends any[]>(
-    signal: AnySignal<T>,
+    listenable: Listenable<T>,
+    flow: Saga<[T, ...A]>,
+    ...args: A
+  ): ContinuousTask;
+  sequential<T, A extends any[]>(
+    atom: Atom<T>,
     flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   sequential<A extends any[]>(
-    signals: SignalList,
+    listenables: ListenableList,
     flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   restartable<T, A extends any[]>(
-    signal: AnySignal<T>,
+    listenable: Listenable<T>,
+    flow: Saga<[T, ...A]>,
+    ...args: A
+  ): ContinuousTask;
+  restartable<T, A extends any[]>(
+    atom: Atom<T>,
     flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   restartable<A extends any[]>(
-    signals: SignalList,
+    listenables: ListenableList,
     flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   droppable<T, A extends any[]>(
-    signal: AnySignal<T>,
+    listenable: Listenable<T>,
+    flow: Saga<[T, ...A]>,
+    ...args: A
+  ): ContinuousTask;
+  droppable<T, A extends any[]>(
+    atom: Atom<T>,
     flow: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   droppable<A extends any[]>(
-    signals: SignalList,
+    listenables: ListenableList,
     flow: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
@@ -438,22 +473,24 @@ const throwError = (context: SagaContext, error: any) => {
 };
 
 const forEachSignalList = (
-  signals: SignalList,
-  callback: (signal: AnySignal<any>) => void
+  listenables: ListenableList,
+  callback: (listenable: Listenable<any>) => void
 ) => {
-  if (isSignal(signals)) {
-    callback(signals);
-  } else if (Array.isArray(signals)) {
-    signals.forEach((signal) => forEachSignalList(signal, callback));
+  if (isSignal(listenables)) {
+    callback(listenables);
+  } else if (Array.isArray(listenables)) {
+    listenables.forEach((listenable) =>
+      forEachSignalList(listenable, callback)
+    );
   }
 };
 
 const listen = (
-  signals: SignalList,
+  listenables: ListenableList,
   parentContext: SagaContext,
   callback: (
     context: SagaContext,
-    signal: AnySignal<any>,
+    signal: Listenable<any>,
     prevTask: Task<any> | undefined
   ) => void,
   mode?: "sequential" | "droppable"
@@ -463,13 +500,17 @@ const listen = (
   return Object.assign(
     parentContext.fork(async (listenContext) => {
       const cleanup = createCallbackGroup();
-      const signalQueue: AnySignal<any>[] = [];
+      const signalQueue: Listenable<any>[] = [];
       let done: Function | undefined;
       let currentTask: Task<any> | undefined;
       let taskDoneHandled = false;
       let times = 0;
-      const createForkedTask = (signal: AnySignal<any>) =>
-        listenContext.fork(callback, signal.payload(), currentTask);
+      const createForkedTask = (listenable: Listenable<any>) =>
+        listenContext.fork(
+          callback,
+          isAtom(listenable) ? listenable.state : listenable.payload(),
+          currentTask
+        );
       const stopIfPossible = () => {
         if (times < maxTimes) return;
         cleanup.call();
@@ -494,20 +535,20 @@ const listen = (
         stopIfPossible();
       };
 
-      forEachSignalList(signals, (signal) => {
+      forEachSignalList(listenables, (listenable) => {
         cleanup.add(
-          signal.on(() => {
+          listenable.on(() => {
             if (listenContext.cancelled()) return;
             if (mode === "droppable" && currentTask?.status() === "running") {
               return;
             }
 
             if (mode === "sequential") {
-              signalQueue.push(signal);
+              signalQueue.push(listenable);
               handleTaskDone();
             } else {
               times++;
-              currentTask = createForkedTask(signal);
+              currentTask = createForkedTask(listenable);
               stopIfPossible();
             }
           })
@@ -682,7 +723,7 @@ const createTaskContext = (
         cleanup.add(
           target.on(() => {
             if (cancellable.cancelled()) return;
-            resolve(target.payload());
+            resolve(isAtom(target) ? target.state : target.payload());
           })
         );
       });
@@ -702,14 +743,19 @@ const createTaskContext = (
     allSettled(awaitables) {
       return wait(awaitables, "allSettled");
     },
-    on(signals: SignalList, flow: Saga, ...args: any[]) {
-      return listen(signals, context, (context, signal) =>
+    on(listenables: ListenableList, flow: Saga, ...args: any[]) {
+      return listen(listenables, context, (context, signal) =>
         flow(context, signal, ...args)
       );
     },
-    debounce(ms: number, signals: SignalList, flow: Saga, ...args: any[]) {
+    debounce(
+      ms: number,
+      listenables: ListenableList,
+      flow: Saga,
+      ...args: any[]
+    ) {
       let timer: any;
-      return listen(signals, context, (context, signal, prevTask) => {
+      return listen(listenables, context, (context, signal, prevTask) => {
         prevTask?.cancel();
         context.onCancel(() => clearTimeout(timer));
 
@@ -718,34 +764,39 @@ const createTaskContext = (
         }, ms);
       });
     },
-    throttle(ms: number, signals: SignalList, flow: Saga, ...args: any[]) {
+    throttle(
+      ms: number,
+      listenables: ListenableList,
+      flow: Saga,
+      ...args: any[]
+    ) {
       let lastExecution = 0;
-      return listen(signals, context, (context, signal) => {
+      return listen(listenables, context, (context, signal) => {
         const now = Date.now();
         if (lastExecution && lastExecution + ms > now) return;
         lastExecution = now;
         return flow(context, signal, ...args);
       });
     },
-    sequential(signals: SignalList, flow: Saga, ...args: any[]) {
+    sequential(listenables: ListenableList, flow: Saga, ...args: any[]) {
       return listen(
-        signals,
+        listenables,
         context,
-        (context, signal) => flow(context, signal, ...args),
+        (context, listenable) => flow(context, listenable, ...args),
         "sequential"
       );
     },
-    restartable(signals: SignalList, flow: Saga, ...args: any[]) {
-      return listen(signals, context, (context, signal, prevTask) => {
+    restartable(listenables: ListenableList, flow: Saga, ...args: any[]) {
+      return listen(listenables, context, (context, listenable, prevTask) => {
         prevTask?.cancel();
-        return flow(context, signal, ...args);
+        return flow(context, listenable, ...args);
       });
     },
-    droppable(signals: SignalList, flow: Saga, ...args: any[]) {
+    droppable(listenables: ListenableList, flow: Saga, ...args: any[]) {
       return listen(
-        signals,
+        listenables,
         context,
-        (context, signal) => flow(context, signal, ...args),
+        (context, listenable) => flow(context, listenable, ...args),
         "droppable"
       );
     },
