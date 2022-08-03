@@ -194,7 +194,7 @@ const isEmittableProp = "$$emittable";
 const isTaskProp = "$$task";
 const isSignalProp = "$$signal";
 const noop = () => {};
-const forever = new Promise(noop);
+const forever = new Promise<any>(noop);
 
 const isAwaitable = (value: any): value is Awaitable =>
   value && value[isAwaitableProp];

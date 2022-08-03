@@ -559,6 +559,11 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   return atom;
 };
 
+/**
+ * determine the value is whether atom or not
+ * @param value
+ * @returns
+ */
 const isAtom = <T>(value: any): value is Atom<T> => {
   return value && value[isAtomProp];
 };

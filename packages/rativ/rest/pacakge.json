@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/api/rest.js",
+  "types": "../dist/tsc/api/rest.d.ts"
+}
