@@ -7,7 +7,10 @@ type Passenger = {
   to: number;
 };
 
+type ElevatorStatus = "idle" | "moving" | "opening";
+
 type Elevator = {
+  status: ElevatorStatus;
   /**
    * name of elevator
    */
@@ -47,6 +50,7 @@ test("elevator", () => {
       (name) =>
         ({
           name,
+          status: "idle",
           maxPassengers: 10,
           maxWeight: 500,
           current: 0,
@@ -138,10 +142,14 @@ test("elevator", () => {
             // nothing to update
             return;
           }
+          // reach destination level
+          if (prev.status === "moving") {
+            // change to opening status for pickup or dropoff
+            return prop("status", () => "opening" as ElevatorStatus);
+          }
 
           moved++;
 
-          // reach destination level
           if (prev.current === prev.destination) {
             const next = prev.destination;
             const hasNewPassenger = prev.waiting.some((x) => x.from === next);
@@ -160,9 +168,11 @@ test("elevator", () => {
               // pick up passengers
               ...prev.waiting.filter((x) => x.from === next),
             ];
+            const nextDestination = findNearestFloor(next, nextUsing);
 
             return [
               prop("current", () => next),
+              prop("status", () => (nextDestination ? "moving" : "idle")),
               prop(
                 "using",
                 shallow(() => nextUsing)
@@ -172,7 +182,7 @@ test("elevator", () => {
                 "waiting",
                 include((x) => x.from !== next)
               ),
-              prop("destination", () => findNearestFloor(next, nextUsing)),
+              prop("destination", () => nextDestination),
             ];
           }
 
