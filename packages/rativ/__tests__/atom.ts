@@ -143,7 +143,7 @@ test("async computed atom #2", async () => {
   factor.state++;
   await delay(20);
   expect(result.state).toEqual(300);
-  expect(updateCount).toBe(4);
+  expect(updateCount).toBe(3);
 });
 
 test("updater", async () => {

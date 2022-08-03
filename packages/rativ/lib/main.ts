@@ -180,9 +180,10 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       listeners = allListeners.state;
     }
 
-    if (!type) {
-      listener(storage.state);
-    }
+    // if (!type) {
+    //   listener(storage.state);
+    // }
+
     return listeners.add(listener);
   };
 

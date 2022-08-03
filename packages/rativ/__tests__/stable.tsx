@@ -105,5 +105,5 @@ test("rerender", async () => {
   });
   await act(() => delay(20));
   expect(getByTestId("output").textContent).toEqual("300");
-  expect(updateCount).toBe(4);
+  expect(updateCount).toBe(3);
 });

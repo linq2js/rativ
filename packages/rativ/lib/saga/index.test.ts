@@ -2,15 +2,15 @@ import { atom } from "../main";
 import { signal, spawn, delay, Saga, SagaContext } from ".";
 
 test("listen atom", () => {
-  const counter = atom(0);
+  const counter = atom(1);
   let result = 0;
   spawn(({ on }) => {
     on(counter, (_, value) => {
       result += value;
     });
   });
-  counter.set(1);
-  expect(result).toBe(1);
+  counter.set(2);
+  expect(result).toBe(2);
 });
 
 test("signal without payload", () => {
