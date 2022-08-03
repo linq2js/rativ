@@ -476,7 +476,7 @@ const forEachSignalList = (
   listenables: ListenableList,
   callback: (listenable: Listenable<any>) => void
 ) => {
-  if (isSignal(listenables)) {
+  if (isSignal(listenables) || isAtom(listenables)) {
     callback(listenables);
   } else if (Array.isArray(listenables)) {
     listenables.forEach((listenable) =>
