@@ -400,6 +400,31 @@ const createTask = <T = void>(
     status = "cancelled";
   });
 
+  const changeStatus = (value: any, error: any) => {
+    if (status !== "running") return;
+
+    if (forkedTasks.length) {
+      // wait until all forked task done
+      if (!error) {
+        const handleForkedTaskDone = () => {
+          changeStatus(value, error);
+        };
+        forkedTasks.forEach((task) => {
+          if (task.status() === "running") {
+            task.on(handleForkedTaskDone);
+          }
+        });
+        return;
+      }
+      // cancel all forked tasks
+      forkedTasks.forEach((task) => task.cancel());
+    }
+    result = value;
+    status = error ? "error" : "success";
+    dispose();
+    emittable.emit();
+  };
+
   return Object.assign(
     () => {
       if (status !== "idle") return promise;
@@ -413,31 +438,20 @@ const createTask = <T = void>(
           promise = new Promise<T>((resolve, reject) => {
             r.then((value) => {
               if (status !== "running") return;
-              result = value;
-              status = "success";
-              dispose();
-              emittable.emit();
+              changeStatus(value, undefined);
               resolve(value);
             }).catch((ex) => {
               if (status !== "running") return;
-              error = ex;
-              status = "error";
-              dispose();
-              emittable.emit();
+              changeStatus(undefined, ex);
               reject(ex);
             });
           });
         } else {
-          status = "success";
-          dispose();
-          emittable.emit();
+          changeStatus(r, undefined);
           promise = Promise.resolve(r);
         }
       } catch (ex) {
-        error = ex;
-        status = "error";
-        dispose();
-        emittable.emit();
+        changeStatus(undefined, ex);
         promise = Promise.reject(ex);
       }
       // always catch error
