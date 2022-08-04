@@ -1,7 +1,7 @@
 import { createCallbackGroup } from "../util/createCallbackGroup";
 import { isPromiseLike } from "../util/isPromiseLike";
 import { delay } from "../util/delay";
-import { Atom, isAtom } from "../main";
+import { Atom, isAtom, SetFn, UpdatableAtom } from "../main";
 
 export type TaskStatus = "idle" | "running" | "error" | "success" | "cancelled";
 
@@ -66,6 +66,8 @@ export type SagaContext = Cancellable & {
   all<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
   allSettled<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
   fork<A extends any[], R = void>(flow: Saga<A, R>, ...args: A): Task<R>;
+
+  set<T>(atom: UpdatableAtom<T>, ...args: Parameters<SetFn<T>>): Promise<void>;
 
   call<A extends any[], R, F extends Saga<A, R>>(
     flow: F,
@@ -733,6 +735,23 @@ const createTaskContext = (
           })
         );
       });
+    },
+    set(atom, ...args) {
+      const cancelUpdate = atom.set(...args);
+      onCancel.add(cancelUpdate);
+      if (atom.loading) {
+        return new Promise((resolve, reject) => {
+          onDispose.add(
+            atom.on("status", () => {
+              if (atom.error()) {
+                return reject(atom.error());
+              }
+              resolve();
+            })
+          );
+        });
+      }
+      return Promise.resolve();
     },
     fork(effect, ...args) {
       const childTask = createTask((childContext) =>
