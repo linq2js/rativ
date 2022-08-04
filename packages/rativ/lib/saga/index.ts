@@ -1,7 +1,7 @@
 import { createCallbackGroup } from "../util/createCallbackGroup";
 import { isPromiseLike } from "../util/isPromiseLike";
 import { delay } from "../util/delay";
-import { Atom, isAtom, SetFn, UpdatableAtom } from "../main";
+import { Atom, EmittableAtom, isAtom, SetFn, UpdatableAtom } from "../main";
 
 export type TaskStatus = "idle" | "running" | "error" | "success" | "cancelled";
 
@@ -68,6 +68,8 @@ export type SagaContext = Cancellable & {
   fork<A extends any[], R = void>(flow: Saga<A, R>, ...args: A): Task<R>;
 
   set<T>(atom: UpdatableAtom<T>, ...args: Parameters<SetFn<T>>): Promise<void>;
+
+  emit<T, A>(atom: EmittableAtom<T, A>, payload: A): Promise<void>;
 
   call<A extends any[], R, F extends Saga<A, R>>(
     flow: F,
@@ -740,7 +742,7 @@ const createTaskContext = (
       const cancelUpdate = atom.set(...args);
       onCancel.add(cancelUpdate);
       if (atom.loading) {
-        return new Promise((resolve, reject) => {
+        const promise = new Promise<void>((resolve, reject) => {
           onDispose.add(
             atom.on("status", () => {
               if (atom.error()) {
@@ -750,6 +752,26 @@ const createTaskContext = (
             })
           );
         });
+        context.fork(() => promise);
+        return promise;
+      }
+      return Promise.resolve();
+    },
+    emit(atom, payload) {
+      atom.emit(payload);
+      if (atom.loading) {
+        const promise = new Promise<void>((resolve, reject) => {
+          onDispose.add(
+            atom.on("status", () => {
+              if (atom.error()) {
+                return reject(atom.error());
+              }
+              resolve();
+            })
+          );
+        });
+        context.fork(() => promise);
+        return promise;
       }
       return Promise.resolve();
     },
