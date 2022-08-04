@@ -837,6 +837,11 @@ const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
   return handleAwaitables(input, (values) => values);
 };
 
+const throws = (error: string | Error): never => {
+  if (typeof error === "string") error = new Error(error);
+  throw error;
+};
+
 export * from "./util/commonTypes";
 
 export {
@@ -848,4 +853,5 @@ export {
   createWatcher as watch,
   createSnapshot as snapshot,
   createAwaiter as wait,
+  throws,
 };
