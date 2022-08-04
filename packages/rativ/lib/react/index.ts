@@ -29,6 +29,7 @@ export type Refs<T extends Record<string, any> = {}, F = any> = {
 
 export type CreateSlot = {
   (computeFn: () => any): ReactNode;
+  <A extends any[]>(computeFn: (...args: A) => any, ...args: A): ReactNode;
 };
 
 /**
@@ -455,8 +456,10 @@ const SlotWrapper: FC<{ slot: any }> = (props) => {
  * @param slot
  * @returns
  */
-const createSlot: CreateSlot = (slot): any => {
-  return createElement(SlotWrapper, { slot });
+const createSlot: CreateSlot = (slot: Function, ...args: any[]): any => {
+  return createElement(SlotWrapper, {
+    slot: args.length ? () => slot(...args) : slot,
+  });
 };
 
 /**
