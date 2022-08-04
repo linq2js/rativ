@@ -207,3 +207,8 @@ test("helpers", () => {
   atom3.increment();
   expect(atom3.state).toBe(1);
 });
+
+test("nested", () => {
+  const a1 = atom({ p1: { p2: { p3: true } } });
+  expect(a1("p1.p2.p3")).toBeTruthy();
+});

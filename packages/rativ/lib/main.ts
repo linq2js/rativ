@@ -237,7 +237,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     }
   };
 
-  const get = (selector?: Function) => {
+  const get = (selector?: Function | string) => {
     const scopeType = currentScope?.type;
     if (scopeType === "component") {
       handleDependency(allListeners.status.add);
@@ -252,7 +252,15 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
     handleDependency(allListeners.state.add);
 
-    if (typeof selector === "function") return selector(storage.state);
+    if (typeof selector === "function") {
+      return selector(storage.state);
+    }
+
+    if (typeof selector === "string") {
+      return selector
+        .split(".")
+        .reduce((prev, prop) => prev?.[prop], storage.state as any);
+    }
 
     return storage.state;
   };

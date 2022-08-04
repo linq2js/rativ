@@ -1,4 +1,5 @@
 import { Updater } from "./asyncUpdate";
+import { FieldPath, FieldPathValue } from "./pathTypes";
 
 export type NoInfer<T> = [T][T extends any ? 0 : never];
 
@@ -61,11 +62,14 @@ export type GetFn<T> = {
    * get current state of the atom
    */
   (): T;
+
   /**
    * get result of the selector, the selector retrieves current state of the atom
    * @param selector
    */
   <R>(selector: (state: T) => R): R;
+
+  <K extends FieldPath<T>>(path: K): FieldPathValue<T, K>;
 };
 
 export type SetFn<T> = {

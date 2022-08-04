@@ -723,7 +723,13 @@ const createTaskContext = (
         cleanup.add(
           target.on(() => {
             if (cancellable.cancelled()) return;
-            resolve(isAtom(target) ? target.state : target.payload());
+            resolve(
+              isAtom(target)
+                ? target.state
+                : isSignal(target)
+                ? target.payload()
+                : undefined
+            );
           })
         );
       });
