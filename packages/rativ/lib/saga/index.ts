@@ -745,8 +745,8 @@ const createTaskContext = (
         const promise = new Promise<void>((resolve, reject) => {
           onDispose.add(
             atom.on("status", () => {
-              if (atom.error()) {
-                return reject(atom.error());
+              if (atom.error) {
+                return reject(atom.error);
               }
               resolve();
             })
@@ -763,8 +763,8 @@ const createTaskContext = (
         const promise = new Promise<void>((resolve, reject) => {
           onDispose.add(
             atom.on("status", () => {
-              if (atom.error()) {
-                return reject(atom.error());
+              if (atom.error) {
+                return reject(atom.error);
               }
               resolve();
             })
