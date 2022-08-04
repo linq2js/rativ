@@ -766,7 +766,7 @@ const createTaskContext = (
             })
           );
         });
-        // context.fork(() => promise);
+        context.fork(() => promise);
         return promise;
       }
       return Promise.resolve();
@@ -784,7 +784,7 @@ const createTaskContext = (
             })
           );
         });
-        // context.fork(() => promise);
+        context.fork(() => promise);
         return promise;
       }
       return Promise.resolve();
