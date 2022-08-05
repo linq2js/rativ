@@ -1,5 +1,5 @@
 import { atom } from "../main";
-import { signal, spawn, delay, Saga, SagaContext } from ".";
+import { signal, spawn, delay, Saga, SagaContext, SC } from ".";
 
 test("listen atom", () => {
   const counter = atom(1);
@@ -459,4 +459,39 @@ test("custom emitter", () => {
   external();
   external();
   expect(count).toBe(6);
+});
+
+test("debounce #2 ", async () => {
+  const results = [1, 2, 3];
+  const searchTermAtom = atom("");
+  const searchRepoResultAtom = atom<number | undefined>(0);
+  const cancelSignal = signal();
+  const searchSaga = async ({ delay }: SC) => {
+    await delay(20);
+    return results.shift();
+  };
+  const startSearchingSaga = async ({ call, set }: SC) => {
+    const result = call(searchSaga);
+    set(searchRepoResultAtom, result);
+  };
+
+  const onSearchTermChanged = async ({ race }: SC) => {
+    await race({
+      startSearchingSaga,
+      cancelSignal,
+    });
+  };
+
+  const mainSaga = ({ debounce }: SC) => {
+    debounce(10, searchTermAtom, onSearchTermChanged);
+  };
+
+  spawn(mainSaga);
+  searchTermAtom.set("a");
+  await delay(15);
+  searchTermAtom.set("b");
+  await delay(15);
+  searchTermAtom.set("c");
+  await delay(35);
+  expect(results).toEqual([2, 3]);
 });

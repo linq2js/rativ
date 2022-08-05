@@ -54,6 +54,11 @@ export type ContinuousTask = Task & {
   times(value: number): ContinuousTask;
 };
 
+type ForkFn = <A extends any[], R = void>(
+  flow: Saga<A, R>,
+  ...args: A
+) => Task<R>;
+
 /**
  * Saga context
  */
@@ -65,7 +70,7 @@ export type SagaContext = Cancellable & {
   race<T extends AwaitableMap>(awaitables: T): Promise<Partial<WaitResult<T>>>;
   all<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
   allSettled<T extends AwaitableMap>(awaitables: T): Promise<WaitResult<T>>;
-  fork<A extends any[], R = void>(flow: Saga<A, R>, ...args: A): Task<R>;
+  readonly fork: ForkFn;
 
   set<T>(atom: UpdatableAtom<T>, ...args: Parameters<SetFn<T>>): Promise<void>;
 
@@ -514,6 +519,7 @@ const listen = (
   mode?: "sequential" | "droppable"
 ) => {
   let maxTimes = Number.MAX_VALUE;
+  const fork = (parentContext as any).__fork as ForkFn;
 
   return Object.assign(
     parentContext.fork(async (listenContext) => {
@@ -524,15 +530,16 @@ const listen = (
       let taskDoneHandled = false;
       let times = 0;
       const createForkedTask = (listenable: Listenable<any>) =>
-        listenContext.fork(
+        fork(
           callback,
           isAtom(listenable) ? listenable.state : listenable.payload(),
           currentTask
         );
       const stopIfPossible = () => {
-        if (times < maxTimes) return;
+        if (times < maxTimes) return false;
         cleanup.call();
         done?.();
+        return true;
       };
 
       const handleTaskDone = () => {
@@ -550,6 +557,7 @@ const listen = (
           taskDoneHandled = false;
           handleTaskDone();
         });
+        currentTask();
         stopIfPossible();
       };
 
@@ -567,6 +575,7 @@ const listen = (
             } else {
               times++;
               currentTask = createForkedTask(listenable);
+              currentTask();
               stopIfPossible();
             }
           })
@@ -671,6 +680,15 @@ const createTaskContext = (
         cleanup.add(awaitable.on(() => handleDone(key)));
       });
     });
+  };
+
+  const fork = (effect: Saga<any, any>, ...args: any[]) => {
+    const childTask = createTask((childContext) =>
+      effect(childContext, ...args)
+    );
+    handleForkedTask(childTask);
+    onDispose.add(childTask.cancel);
+    return childTask;
   };
 
   const context: SagaContext = {
@@ -790,11 +808,7 @@ const createTaskContext = (
       return Promise.resolve();
     },
     fork(effect, ...args) {
-      const childTask = createTask((childContext) =>
-        effect(childContext, ...args)
-      );
-      handleForkedTask(childTask);
-      onDispose.add(childTask.cancel);
+      const childTask = fork(effect, ...args);
       childTask();
       return childTask;
     },
@@ -877,6 +891,7 @@ const createTaskContext = (
   };
 
   Object.assign(context, {
+    __fork: fork,
     dispose() {
       if (disposed) return;
       disposed = true;
