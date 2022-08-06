@@ -495,3 +495,53 @@ test("debounce #2 ", async () => {
   await delay(35);
   expect(results).toEqual([2, 3]);
 });
+
+test("error handling #1", () => {
+  let error: any;
+  spawn(({ onError }) => {
+    onError((x) => (error = x));
+    throw "invalid";
+  });
+
+  expect(error).toBe("invalid");
+});
+
+test("error handling #2", async () => {
+  let error: any;
+  const saga1: Saga = async ({ delay }) => {
+    await delay(10);
+    throw "invalid";
+  };
+  const saga2: Saga = async ({ delay }) => {
+    await delay(5);
+  };
+  spawn(async ({ onError, race }) => {
+    onError((x) => (error = x));
+    // saga2 wins, no error thrown
+    await race({ saga1, saga2 });
+  });
+
+  await delay(20);
+
+  expect(error).toBe(undefined);
+});
+
+test("error handling #3", async () => {
+  let error: any;
+  const saga1: Saga = async ({ delay }) => {
+    await delay(10);
+    throw "invalid";
+  };
+  const saga2: Saga = async ({ delay }) => {
+    await delay(15);
+  };
+  spawn(async ({ onError, race }) => {
+    onError((x) => (error = x));
+    // saga1 wins, error throws
+    await race({ saga1, saga2 });
+  });
+
+  await delay(20);
+
+  expect(error).toBe("invalid");
+});

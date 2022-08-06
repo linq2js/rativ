@@ -373,9 +373,7 @@ const createTask = <T = void>(
   const context = createTaskContext(
     (ex) => {
       if (status !== "running") return;
-      error = ex;
-      status = "error";
-      emittable.emit();
+      changeStatus(undefined, ex);
     },
     (forkedTask) => {
       forkedTasks.push(forkedTask);
@@ -383,18 +381,7 @@ const createTask = <T = void>(
   );
   const dispose = () => {
     const disposeContext = (context as any).dispose as VoidFunction;
-    if (forkedTasks.length) {
-      const handleForkedTaskDone = () => {
-        disposeContext();
-      };
-      forkedTasks.forEach((task) => {
-        if (task.status() === "running") {
-          task.on(handleForkedTaskDone);
-        }
-      });
-    } else {
-      disposeContext();
-    }
+    disposeContext();
   };
 
   if (parentContext) {
@@ -426,6 +413,12 @@ const createTask = <T = void>(
     }
     result = value;
     status = error ? "error" : "success";
+    if (status === "error") {
+      throwError(context, error);
+      if (parentContext) {
+        throwError(parentContext, error);
+      }
+    }
     dispose();
     emittable.emit();
   };
@@ -658,7 +651,7 @@ const createTaskContext = (
         const awaitable: Awaitable | Promise<any> | Saga = awaitables[key];
 
         if (isPromiseLike(awaitable)) {
-          const task = createTask(() => awaitable);
+          const task = createTask(() => awaitable, context);
           task();
           return handleTask(key, task);
         }
@@ -683,8 +676,9 @@ const createTaskContext = (
   };
 
   const fork = (effect: Saga<any, any>, ...args: any[]) => {
-    const childTask = createTask((childContext) =>
-      effect(childContext, ...args)
+    const childTask = createTask(
+      (childContext) => effect(childContext, ...args),
+      context
     );
     handleForkedTask(childTask);
     onDispose.add(childTask.cancel);
