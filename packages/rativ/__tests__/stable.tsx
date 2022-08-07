@@ -1,7 +1,8 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useState } from "react";
 import { act, fireEvent, render } from "@testing-library/react";
 import { delay, Atom, atom, wait } from "../lib/main";
-import { defaultProps, slot, stable } from "../lib/react";
+import { defaultProps, effect, slot, stable } from "../lib/react";
+import { signal } from "../lib/saga";
 
 test("default props", () => {
   const Component = stable((props: { message?: string }) => {
@@ -106,4 +107,33 @@ test("rerender", async () => {
   await act(() => delay(20));
   expect(getByTestId("output").textContent).toEqual("300");
   expect(updateCount).toBe(3);
+});
+
+test("onRender", () => {
+  const clicked = signal();
+  let renderCount = 0;
+  const doSomething = () => {
+    effect(
+      () => {},
+      () => {
+        const rerender = useState<any>()[1];
+        clicked.on(() => {
+          rerender({});
+        });
+      }
+    );
+  };
+  const Component = stable(() => {
+    doSomething();
+    return () => {
+      renderCount++;
+      return null;
+    };
+  });
+  render(<Component />);
+  expect(renderCount).toBe(1);
+  act(() => {
+    clicked();
+  });
+  expect(renderCount).toBe(2);
 });

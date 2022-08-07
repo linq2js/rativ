@@ -1,4 +1,4 @@
-import { CompareFn } from "./commonTypes";
+import { CompareFn } from "./types";
 
 const arraySliceMethod = [].slice;
 const regexpExecMethod = /a/.exec;

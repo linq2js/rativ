@@ -286,6 +286,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
       const unmountEffects = createCallbackGroup();
       const refsProxy = createRefs();
       const disposeLocalAtoms = createCallbackGroup();
+      const renderCallbacks = createCallbackGroup();
 
       let render: (forceUpdate: Function) => any;
 
@@ -310,7 +311,8 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
           onAtomCreated(disposeAtom) {
             disposeLocalAtoms.add(disposeAtom);
           },
-          addEffect(effect) {
+          addEffect(effect, onRender) {
+            if (onRender) renderCallbacks.add(onRender);
             effects.push(effect as Effect);
           },
         }
@@ -341,6 +343,9 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
         // the forceUpdate function comes from inner component.
         // We use it to force inner component update whenever atom changed
         forceChildUpdate = forceUpdate;
+
+        renderCallbacks.call();
+
         if (typeof result === "function") {
           return collectDependencies(result, dependencies, rerender, {
             type: "component",
@@ -464,15 +469,15 @@ const createSlot: CreateSlot = (slot: Function, ...args: any[]): any => {
 
 /**
  * use effect
- * @param fn
+ * @param onMount
  */
-const createEffect = (fn: Effect) => {
+const createEffect = (onMount: Effect, onRender?: VoidFunction) => {
   if (!currentScope?.addEffect) {
     throw new Error(
       "Cannot call effect() helper outside stable part of stable component"
     );
   }
-  currentScope.addEffect(fn);
+  currentScope.addEffect(onMount, onRender);
 };
 
 const defaultProps = <T>(props: T, defaultValues: Partial<T>) => {

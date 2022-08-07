@@ -1,4 +1,4 @@
-import { Mutation, NoInfer, Nullable } from "../util/commonTypes";
+import { Mutation, NoInfer, Nullable } from "../util/types";
 import { deepEqual, shallowEqual } from "../util/compare";
 
 export * from "./array";

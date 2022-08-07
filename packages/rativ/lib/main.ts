@@ -27,7 +27,7 @@ import {
   UpdatableAtom,
   Wait,
   SetFn,
-} from "./util/commonTypes";
+} from "./util/types";
 import { isErrorHandled } from "./util/errorHandling";
 
 const isAtomProp = "$$atom";
@@ -859,7 +859,7 @@ const throws = (error: string | Error): never => {
   throw error;
 };
 
-export * from "./util/commonTypes";
+export * from "./util/types";
 
 export {
   createAtomFamily as family,

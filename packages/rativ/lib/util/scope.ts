@@ -1,4 +1,4 @@
-import { Context } from "./commonTypes";
+import { Context } from "./types";
 
 export type InternalContext = Context & {
   taskIndex: number;
@@ -18,7 +18,7 @@ export type Scope = {
     | "stable";
   addDependency?: (subscribeChannel: Function) => void;
   onAtomCreated?: (disposeAtom: VoidFunction) => void;
-  addEffect?: (effect: Function) => void;
+  addEffect?: (effect: Function, onRender: VoidFunction | undefined) => void;
   context?: InternalContext;
   onDone?: VoidFunction;
   onCleanup?: (listener: VoidFunction) => VoidFunction;
