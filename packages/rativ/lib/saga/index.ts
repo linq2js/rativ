@@ -772,6 +772,7 @@ const createTaskContext = (
           onDispose.add(
             atom.on("error", (e) => {
               e.rollback();
+              reject(e.error);
               throwError(context, e.error);
             })
           );
@@ -799,6 +800,7 @@ const createTaskContext = (
           onDispose.add(
             atom.on("error", (e) => {
               e.rollback();
+              reject(e.error);
               throwError(context, e.error);
             })
           );
