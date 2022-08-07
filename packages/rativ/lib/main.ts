@@ -28,6 +28,7 @@ import {
   Wait,
   SetFn,
 } from "./util/commonTypes";
+import { isErrorHandled } from "./util/errorHandling";
 
 const isAtomProp = "$$atom";
 export type CreateAtom = {
@@ -120,6 +121,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   const allListeners = {
     emit: createCallbackGroup(),
     state: createCallbackGroup(),
+    error: createCallbackGroup(),
     status: createCallbackGroup(),
   };
   const key = {};
@@ -169,11 +171,8 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
     if (typeof args[0] === "string") {
       type = args[0];
-      if (type === "error" || type === "loading") {
-        type = "status";
-      }
       listener = args[1];
-      listeners = (allListeners as any)[args[0]];
+      listeners = (allListeners as any)[type];
       if (!listeners) throw new Error("Invalid event type");
     } else {
       listener = args[0];
@@ -204,12 +203,29 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     nextLoading: boolean,
     nextError: any,
     nextState: any
-  ) => {
+  ): void => {
     let statusChanged = false;
     let stateChanged = false;
 
     if (!nextLoading) {
       storage.task = undefined;
+    }
+
+    if (nextError && nextError !== storage.error) {
+      let rolledBack = false;
+      const e = {
+        error: nextError,
+        rollback() {
+          if (rolledBack) return;
+          rolledBack = true;
+        },
+      };
+
+      allListeners.error.call(e);
+
+      if (rolledBack) {
+        return changeStatus(false, undefined, storage.state);
+      }
     }
 
     if (nextLoading !== storage.loading || nextError !== storage.error) {
@@ -245,7 +261,8 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       if (storage.loading) {
         throw storage.task;
       }
-      if (storage.error) {
+
+      if (storage.error && !isErrorHandled(storage.error, atom)) {
         throw storage.error;
       }
     }

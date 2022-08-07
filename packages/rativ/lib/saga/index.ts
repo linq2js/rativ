@@ -770,6 +770,13 @@ const createTaskContext = (
       if (atom.loading) {
         const promise = new Promise<void>((resolve, reject) => {
           onDispose.add(
+            atom.on("error", (e) => {
+              e.rollback();
+              throwError(context, e.error);
+            })
+          );
+
+          onDispose.add(
             atom.on("status", () => {
               if (atom.error) {
                 return reject(atom.error);
@@ -780,6 +787,8 @@ const createTaskContext = (
         });
         context.fork(() => promise);
         return promise;
+      } else {
+        if (atom.error) throw atom.error;
       }
       return Promise.resolve();
     },
@@ -787,6 +796,13 @@ const createTaskContext = (
       atom.emit(payload);
       if (atom.loading) {
         const promise = new Promise<void>((resolve, reject) => {
+          onDispose.add(
+            atom.on("error", (e) => {
+              e.rollback();
+              throwError(context, e.error);
+            })
+          );
+
           onDispose.add(
             atom.on("status", () => {
               if (atom.error) {

@@ -9,6 +9,8 @@ export type Nullable<T> = T | undefined | null;
 
 export type Mutation<T, R = T> = (prev: T) => R;
 
+export type AtomErrorEvent = { error: any; rollback(): void };
+
 export type Atom<T = any> = GetFn<T> & {
   /**
    * name of atom
@@ -37,6 +39,7 @@ export type Atom<T = any> = GetFn<T> & {
    * @param listener
    */
   on(type: "status", listener: Listener<void>): VoidFunction;
+  on(type: "error", listener: Listener<AtomErrorEvent>): VoidFunction;
   readonly get: GetFn<T>;
   /**
    * reset atom state

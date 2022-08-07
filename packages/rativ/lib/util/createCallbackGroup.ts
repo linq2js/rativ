@@ -38,6 +38,7 @@ const createCallbackGroup = (): CallbackGroup => {
       callbacks.length = 0;
     },
     call(...args: any[]) {
+      if (!callbacks.length) return;
       // optimize performance
       if (args.length > 2) {
         callbacks.slice().forEach((callback) => callback(...args));

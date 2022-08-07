@@ -545,3 +545,21 @@ test("error handling #3", async () => {
 
   expect(error).toBe("invalid");
 });
+
+test("error handling #4", async () => {
+  let error: any;
+  const count = atom(0);
+  const increment = async () => {
+    throw "invalid";
+  };
+  spawn(async ({ onError, set }) => {
+    onError((x) => (error = x));
+    set(count, increment());
+    expect(count.loading).toBeTruthy();
+  });
+
+  await delay();
+
+  expect(error).toBe("invalid");
+  expect(count()).toBe(0);
+});
