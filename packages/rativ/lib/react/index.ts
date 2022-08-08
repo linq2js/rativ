@@ -222,7 +222,7 @@ const createPropsProxy = <P extends Record<string, any>>(
         if (typeof currentValue === "function") {
           let cachedValue = propCache.get(p);
           if (typeof cachedValue !== "function") {
-            cachedValue = createStableFunction(() => props[p]);
+            cachedValue = createStableFunction(() => getProps()[p]);
             propCache.set(p, cachedValue);
           }
 

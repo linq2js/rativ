@@ -152,3 +152,31 @@ test("ref", () => {
   render(<Component />);
   expect(count).toBe(2);
 });
+
+test("stable function", () => {
+  const Stable = stable((props: { onPress: () => void }) => {
+    return <button data-testid="button" onClick={props.onPress} />;
+  });
+
+  const Counter = () => {
+    const [count, setCount] = useState(0);
+    return (
+      <>
+        <Stable onPress={() => setCount(count + 1)} />
+        <div data-testid="output">{count}</div>
+      </>
+    );
+  };
+
+  const { getByTestId } = render(<Counter />);
+
+  expect(getByTestId("output").textContent).toBe("0");
+  act(() => {
+    fireEvent.click(getByTestId("button"));
+  });
+  expect(getByTestId("output").textContent).toBe("1");
+  act(() => {
+    fireEvent.click(getByTestId("button"));
+  });
+  expect(getByTestId("output").textContent).toBe("2");
+});
