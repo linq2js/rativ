@@ -22,7 +22,7 @@ import { collectDependencies, currentScope, scopeOfWork } from "../util/scope";
 export type StableOptions = { name?: string };
 
 export type Refs<T extends Record<string, any> = {}, F = any> = {
-  [key in keyof T]?: T[key];
+  [key in keyof T]: T[key];
 } & { [key in `${keyof T & string}Ref`]: RefObject<any> } & {
   forwardedRef: ForwardedRef<F>;
 };

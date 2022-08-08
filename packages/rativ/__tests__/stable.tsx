@@ -1,9 +1,8 @@
 import React, { Suspense, useState } from "react";
 import { act, fireEvent, render } from "@testing-library/react";
 import { delay, Atom, atom, wait } from "../lib/main";
-import { defaultProps, effect, slot, stable } from "../lib/react";
+import { defaultProps, effect, slot, stable, Refs } from "../lib/react";
 import { signal } from "../lib/saga";
-import { Refs } from "rativ";
 
 test("default props", () => {
   const Component = stable((props: { message?: string }) => {
