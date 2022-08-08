@@ -1,6 +1,8 @@
 import { Updater } from "./asyncUpdate";
 import { FieldPath, FieldPathValue } from "./pathTypes";
 
+export type AnyFunc = (...args: any[]) => any;
+
 export type NoInfer<T> = [T][T extends any ? 0 : never];
 
 export type Listener<T, A = void> = (e: T, a: A) => void;
@@ -230,3 +232,10 @@ export type KeyOf = {
 };
 
 export type CompareFn<T = any> = (a: T, b: T) => boolean;
+
+export type FuncRef<T extends AnyFunc> = {
+  (...args: Parameters<T>): ReturnType<T>;
+  current: T;
+};
+
+export type ValueRef<T> = { (): T; current: T };

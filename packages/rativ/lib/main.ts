@@ -27,6 +27,9 @@ import {
   UpdatableAtom,
   Wait,
   SetFn,
+  AnyFunc,
+  FuncRef,
+  ValueRef,
 } from "./util/types";
 import { isErrorHandled } from "./util/errorHandling";
 
@@ -854,6 +857,33 @@ const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
   return handleAwaitables(input, (values) => values);
 };
 
+export type CreateRef = {
+  <T>(): T extends AnyFunc
+    ? FuncRef<Exclude<T, undefined | null>>
+    : ValueRef<Exclude<T, undefined | null>>;
+};
+
+const createRef: CreateRef = (): any => {
+  let currentValue: any;
+  let isFunction = false;
+  const invoker = (...args: any[]) => {
+    if (typeof currentValue === "undefined" || currentValue === null) {
+      throw new Error("Ref value cannot be null or undefined");
+    }
+    return isFunction ? currentValue(...args) : currentValue;
+  };
+
+  Object.defineProperty(invoker, "current", {
+    get: () => currentValue,
+    set: (value: any) => {
+      currentValue = value;
+      isFunction = typeof currentValue === "function";
+    },
+  });
+
+  return invoker;
+};
+
 const throws = (error: string | Error): never => {
   if (typeof error === "string") error = new Error(error);
   throw error;
@@ -871,4 +901,5 @@ export {
   createSnapshot as snapshot,
   createAwaiter as wait,
   throws,
+  createRef as ref,
 };
