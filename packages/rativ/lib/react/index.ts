@@ -151,22 +151,35 @@ export type Effect<R = any> = (
 
 const createRefs = <R, F = any>(): Refs<R, F> => {
   const refCache = new Map<any, RefObject<any>>();
+  const getRef = (p: string) => {
+    let ref = refCache.get(p);
+    if (!ref) {
+      ref = createRef();
+      refCache.set(p, ref);
+    }
+    return ref;
+  };
   const refsProxy = new Proxy(
     {},
     {
       get(_, p) {
         if (typeof p === "string") {
           if (p.endsWith("Ref")) {
-            let ref = refCache.get(p);
-            if (!ref) {
-              ref = createRef();
-              refCache.set(p, ref);
-            }
-            return ref;
+            return getRef(p);
           }
-          const ref = refCache.get(p + "Ref");
+          const ref = getRef(p + "Ref");
           return ref?.current;
         }
+      },
+      set(_, p, value) {
+        if (typeof p === "string") {
+          if (p.endsWith("Ref")) {
+            throw new Error(`Cannot mutate ref object. Use refs.${p} = value`);
+          }
+          const ref = getRef(p + "Ref");
+          Object.assign(ref, { current: value });
+        }
+        return true;
       },
     }
   );

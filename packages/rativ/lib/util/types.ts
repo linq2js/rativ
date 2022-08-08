@@ -232,10 +232,3 @@ export type KeyOf = {
 };
 
 export type CompareFn<T = any> = (a: T, b: T) => boolean;
-
-export type FuncRef<T extends AnyFunc> = {
-  (...args: Parameters<T>): ReturnType<T>;
-  current: T;
-};
-
-export type ValueRef<T> = { (): T; current: T };

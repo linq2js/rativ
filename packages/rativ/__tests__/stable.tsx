@@ -3,6 +3,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { delay, Atom, atom, wait } from "../lib/main";
 import { defaultProps, effect, slot, stable } from "../lib/react";
 import { signal } from "../lib/saga";
+import { Refs } from "rativ";
 
 test("default props", () => {
   const Component = stable((props: { message?: string }) => {
@@ -136,4 +137,19 @@ test("onRender", () => {
     clicked();
   });
   expect(renderCount).toBe(2);
+});
+
+test("ref", () => {
+  let count = 0;
+  const Component = stable((_, refs: Refs<{ count: number }>) => {
+    refs.count = 1;
+
+    return () => {
+      refs.count++;
+      count = refs.count;
+      return null;
+    };
+  });
+  render(<Component />);
+  expect(count).toBe(2);
 });
