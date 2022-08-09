@@ -314,20 +314,18 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
     if (isPromiseLike(nextState)) {
       let token: any;
-
+      let cancelled = false;
       storage.task = nextState
         .then((value) => {
-          if (storage.changeToken !== token) return;
-          storage.task = undefined;
+          if (storage.changeToken !== token || cancelled) return;
           changeStatus(false, undefined, value);
         })
         .catch((error) => {
-          if (storage.changeToken !== token) return;
-          if (error && error.name === "AbortError") {
+          if (storage.changeToken !== token || cancelled) return;
+          if (error?.name === "AbortError") {
             changeStatus(false, undefined, storage.state);
             return;
           }
-          storage.task = undefined;
           changeStatus(false, error, storage.state);
         });
 
@@ -336,7 +334,8 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       token = storage.changeToken;
 
       return () => {
-        if (token !== storage.changeToken) return;
+        if (token !== storage.changeToken || cancelled) return;
+        cancelled = true;
         atom.cancel();
       };
     }
