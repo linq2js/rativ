@@ -55,7 +55,7 @@ export type ContinuousTask = Task & {
 };
 
 type ForkFn = <A extends any[], R = void>(
-  flow: Saga<A, R>,
+  saga: Saga<A, R>,
   ...args: A
 ) => Task<R>;
 
@@ -77,7 +77,7 @@ export type SagaContext = Cancellable & {
   emit<T, A>(atom: EmittableAtom<T, A>, payload: A): Promise<void>;
 
   call<A extends any[], R, F extends Saga<A, R>>(
-    flow: F,
+    saga: F,
     ...args: A
   ): ReturnType<F>;
 
@@ -92,103 +92,103 @@ export type SagaContext = Cancellable & {
 
   on<T, A extends any[]>(
     atom: Atom<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   on<T, A extends any[]>(
     listenable: Listenable<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   on<A extends any[]>(
     listenables: ListenableList,
-    flow: Saga<[any, ...A]>,
+    saga: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   debounce<T, A extends any[]>(
     ms: number,
     listenable: Listenable<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   debounce<T, A extends any[]>(
     ms: number,
     atom: Atom<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   debounce<A extends any[]>(
     ms: number,
     listenables: ListenableList,
-    flow: Saga<[any, ...A]>,
+    saga: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   throttle<T, A extends any[]>(
     ms: number,
     listenable: Listenable<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   throttle<T, A extends any[]>(
     ms: number,
     atom: Atom<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   throttle<A extends any[]>(
     ms: number,
     listenables: ListenableList,
-    flow: Saga<[any, ...A]>,
+    saga: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   sequential<T, A extends any[]>(
     listenable: Listenable<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   sequential<T, A extends any[]>(
     atom: Atom<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   sequential<A extends any[]>(
     listenables: ListenableList,
-    flow: Saga<[any, ...A]>,
+    saga: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   restartable<T, A extends any[]>(
     listenable: Listenable<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   restartable<T, A extends any[]>(
     atom: Atom<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   restartable<A extends any[]>(
     listenables: ListenableList,
-    flow: Saga<[any, ...A]>,
+    saga: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
   droppable<T, A extends any[]>(
     listenable: Listenable<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   droppable<T, A extends any[]>(
     atom: Atom<T>,
-    flow: Saga<[T, ...A]>,
+    saga: Saga<[T, ...A]>,
     ...args: A
   ): ContinuousTask;
   droppable<A extends any[]>(
     listenables: ListenableList,
-    flow: Saga<[any, ...A]>,
+    saga: Saga<[any, ...A]>,
     ...args: A
   ): ContinuousTask;
 
@@ -476,10 +476,10 @@ const createTask = <T = void>(
 };
 
 const spawn = <A extends any[] = [], R = any>(
-  flow: Saga<A, R>,
+  saga: Saga<A, R>,
   ...args: A
 ): Task<R> => {
-  const task = createTask((context) => flow(context, ...args));
+  const task = createTask((context) => saga(context, ...args));
   task();
   return task;
 };
@@ -504,12 +504,8 @@ const forEachSignalList = (
 const listen = (
   listenables: ListenableList,
   parentContext: SagaContext,
-  callback: (
-    context: SagaContext,
-    signal: Listenable<any>,
-    prevTask: Task<any> | undefined
-  ) => void,
-  mode?: "sequential" | "droppable"
+  callback: (context: SagaContext, signal: Listenable<any>) => void,
+  mode?: "sequential" | "droppable" | "restartable"
 ) => {
   let maxTimes = Number.MAX_VALUE;
   const fork = (parentContext as any).__fork as ForkFn;
@@ -522,12 +518,15 @@ const listen = (
       let currentTask: Task<any> | undefined;
       let taskDoneHandled = false;
       let times = 0;
-      const createForkedTask = (listenable: Listenable<any>) =>
-        fork(
+      const createForkedTask = (listenable: Listenable<any>) => {
+        if (mode === "restartable") {
+          currentTask?.cancel();
+        }
+        return fork(
           callback,
-          isAtom(listenable) ? listenable.state : listenable.payload(),
-          currentTask
+          isAtom(listenable) ? listenable.state : listenable.payload()
         );
+      };
       const stopIfPossible = () => {
         if (times < maxTimes) return false;
         cleanup.call();
@@ -830,31 +829,34 @@ const createTaskContext = (
     allSettled(awaitables) {
       return wait(awaitables, "allSettled");
     },
-    on(listenables: ListenableList, flow: Saga, ...args: any[]) {
+    on(listenables: ListenableList, saga: Saga, ...args: any[]) {
       return listen(listenables, context, (context, signal) =>
-        flow(context, signal, ...args)
+        saga(context, signal, ...args)
       );
     },
     debounce(
       ms: number,
       listenables: ListenableList,
-      flow: Saga,
+      saga: Saga,
       ...args: any[]
     ) {
       let timer: any;
-      return listen(listenables, context, (context, signal, prevTask) => {
-        prevTask?.cancel();
-        context.onCancel(() => clearTimeout(timer));
-
-        timer = setTimeout(() => {
-          flow(context, signal, ...args);
-        }, ms);
-      });
+      return listen(
+        listenables,
+        context,
+        (context, signal) => {
+          context.onCancel(() => clearTimeout(timer));
+          timer = setTimeout(() => {
+            saga(context, signal, ...args);
+          }, ms);
+        },
+        "restartable"
+      );
     },
     throttle(
       ms: number,
       listenables: ListenableList,
-      flow: Saga,
+      saga: Saga,
       ...args: any[]
     ) {
       let lastExecution = 0;
@@ -862,28 +864,32 @@ const createTaskContext = (
         const now = Date.now();
         if (lastExecution && lastExecution + ms > now) return;
         lastExecution = now;
-        return flow(context, signal, ...args);
+        return saga(context, signal, ...args);
       });
     },
-    sequential(listenables: ListenableList, flow: Saga, ...args: any[]) {
+    sequential(listenables: ListenableList, saga: Saga, ...args: any[]) {
       return listen(
         listenables,
         context,
-        (context, listenable) => flow(context, listenable, ...args),
+        (context, listenable) => saga(context, listenable, ...args),
         "sequential"
       );
     },
-    restartable(listenables: ListenableList, flow: Saga, ...args: any[]) {
-      return listen(listenables, context, (context, listenable, prevTask) => {
-        prevTask?.cancel();
-        return flow(context, listenable, ...args);
-      });
-    },
-    droppable(listenables: ListenableList, flow: Saga, ...args: any[]) {
+    restartable(listenables: ListenableList, saga: Saga, ...args: any[]) {
       return listen(
         listenables,
         context,
-        (context, listenable) => flow(context, listenable, ...args),
+        (context, listenable) => {
+          return saga(context, listenable, ...args);
+        },
+        "restartable"
+      );
+    },
+    droppable(listenables: ListenableList, saga: Saga, ...args: any[]) {
+      return listen(
+        listenables,
+        context,
+        (context, listenable) => saga(context, listenable, ...args),
         "droppable"
       );
     },

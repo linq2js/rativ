@@ -111,7 +111,7 @@ test("listen signal emit", async () => {
   expect(count).toBe(4);
 });
 
-test("debounce", async () => {
+test("debounce #1", async () => {
   const clicked = signal<number>();
   let count = 0;
   spawn(({ debounce }) => {
