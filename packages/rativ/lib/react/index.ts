@@ -244,7 +244,11 @@ const createPropsProxy = <P extends Record<string, any>>(
         return { enumerable: true, configurable: true };
       },
       ownKeys() {
-        return Object.keys(getProps()).concat("__render");
+        const ownKeys = Object.keys(getProps());
+        if (!ownKeys.includes("__render")) {
+          ownKeys.push("__render");
+        }
+        return ownKeys;
       },
     }
   ) as P;

@@ -322,6 +322,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         })
         .catch((error) => {
           if (storage.changeToken !== token || cancelled) return;
+
           if (error?.name === "AbortError") {
             changeStatus(false, undefined, storage.state);
             return;
@@ -825,10 +826,13 @@ const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
 
         awaitables.forEach((awaitable, index) => {
           if (isPromiseLike(awaitable)) {
-            awaitable.then(
-              (value) => active && onDone(value, index, undefined),
-              (error) => active && onDone(undefined, index, error)
-            );
+            awaitable
+              .then((value) => {
+                active && onDone(value, index, undefined);
+              })
+              .catch((error) => {
+                active && onDone(undefined, index, error);
+              });
             return;
           }
 

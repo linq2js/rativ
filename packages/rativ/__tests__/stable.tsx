@@ -180,3 +180,57 @@ test("stable function", () => {
   });
   expect(getByTestId("output").textContent).toBe("2");
 });
+
+test("debounce ", async () => {
+  const result = atom<number | undefined>(0);
+
+  const Component = stable(() => () => (
+    <div data-testid="output">{result()}</div>
+  ));
+
+  const { getByTestId, findByTestId } = render(
+    <Suspense fallback={<div data-testid="loading" />}>
+      <Component />
+    </Suspense>
+  );
+
+  const r1 = delay(20).then(() => {
+    throw { name: "AbortError" };
+  });
+  let cancel: VoidFunction | undefined;
+  await act(async () => {
+    cancel = result.set(r1);
+    await delay();
+  });
+  await expect(findByTestId("loading")).resolves.not.toBeUndefined();
+  await act(async () => {
+    cancel?.();
+    await delay();
+  });
+  expect(getByTestId("output").textContent).toBe("0");
+
+  const r2 = delay(20).then(() => {
+    throw { name: "AbortError" };
+  });
+  await act(async () => {
+    cancel = result.set(r2);
+    await delay();
+  });
+  await expect(findByTestId("loading")).resolves.not.toBeUndefined();
+  await act(async () => {
+    cancel?.();
+    await delay();
+  });
+  expect(getByTestId("output").textContent).toBe("0");
+
+  const r3 = delay(20).then(() => 1);
+  await act(async () => {
+    result.set(r3);
+    await delay();
+  });
+  await expect(findByTestId("loading")).resolves.not.toBeUndefined();
+  await act(async () => {
+    await delay(30);
+  });
+  expect(getByTestId("output").textContent).toBe("1");
+});

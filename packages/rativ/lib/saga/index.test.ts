@@ -466,9 +466,15 @@ test("debounce #2 ", async () => {
   const searchTermAtom = atom("");
   const searchRepoResultAtom = atom<number | undefined>(0);
   const cancelSignal = signal();
-  const searchSaga = async ({ delay }: SC) => {
-    await delay(20);
-    return results.shift();
+  const searchSaga = ({ delay, onCancel }: SC) => {
+    return new Promise<number>((resolve, reject) => {
+      onCancel(() => {
+        reject({ name: "AbortError" });
+      });
+      delay(20).then(() => {
+        resolve(results.shift() as number);
+      });
+    });
   };
   const startSearchingSaga = async ({ call, set }: SC) => {
     const result = call(searchSaga);
@@ -483,7 +489,7 @@ test("debounce #2 ", async () => {
   };
 
   const mainSaga = ({ debounce }: SC) => {
-    debounce(10, searchTermAtom, onSearchTermChanged);
+    debounce(0, searchTermAtom, onSearchTermChanged);
   };
 
   spawn(mainSaga);
