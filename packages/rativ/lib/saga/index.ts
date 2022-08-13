@@ -10,7 +10,7 @@ export type Saga<A extends any[] = any[], R = any> = (
   ...args: A
 ) => R | Promise<R>;
 
-export type Awaitable<T = void> = {
+export type Awaitable<T> = {
   on(listener: (value: T) => void): VoidFunction;
 };
 
@@ -46,7 +46,7 @@ export type ListenableList = Listenable<any> | Listenable<any>[];
 
 export type AwaitableMap = Record<
   string,
-  Saga<any[], any> | Awaitable | Promise<any>
+  Saga<any[], any> | Awaitable<any> | Promise<any>
 >;
 
 export type ContinuousTask = Task & {
@@ -199,21 +199,21 @@ export type SagaContext = Cancellable & {
 };
 
 export type Task<T = void> = Cancellable &
-  Awaitable & {
+  Awaitable<void> & {
     (): Promise<T>;
     result(): T;
     status(): TaskStatus;
     error(): any;
   };
 
-export type Signal<T = void> = Awaitable & {
+export type Signal<T = void> = Awaitable<T> & {
   (payload: T): void;
   payload(): T;
 };
 
 export type SignalStatus = "idle" | "active" | "pausing";
 
-export type CustomSignal<T> = Awaitable & {
+export type CustomSignal<T> = Awaitable<T> & {
   payload(): T;
   status(): SignalStatus;
   pause(): CustomSignal<T>;
@@ -240,7 +240,7 @@ const isSignalProp = "$$signal";
 const noop = () => {};
 const forever = new Promise<any>(noop);
 
-const isAwaitable = (value: any): value is Awaitable =>
+const isAwaitable = (value: any): value is Awaitable<any> =>
   value && value[isAwaitableProp];
 
 const isCancellable = (value: any): value is Cancellable =>
@@ -647,7 +647,7 @@ const createTaskContext = (
 
       Object.keys(awaitables).forEach((key) => {
         awaitableCount++;
-        const awaitable: Awaitable | Promise<any> | Saga = awaitables[key];
+        const awaitable: Awaitable<any> | Promise<any> | Saga = awaitables[key];
 
         if (isPromiseLike(awaitable)) {
           const task = createTask(() => awaitable, context);
