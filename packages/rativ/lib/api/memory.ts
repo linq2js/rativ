@@ -2,7 +2,7 @@ import { SagaContext } from "../saga";
 import { ApiContext, Resolver } from "./types";
 
 const memory =
-  <P, R>(
+  <P = void, R = void>(
     saga: (context: ApiContext | SagaContext, payload: P) => Promise<R>
   ): Resolver<P, R> =>
   (apiContext) =>
