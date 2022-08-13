@@ -17,6 +17,7 @@
     "styled": "styled",
     "api": "api",
     "rest": "rest",
+    "memory": "memory",
     "react": "react"
   },
   "files": [
@@ -27,6 +28,7 @@
     "styled",
     "react",
     "api",
+    "memory",
     "rest",
     "dist/tsc"
   ],

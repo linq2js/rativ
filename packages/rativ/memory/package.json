@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/api/memory.js",
+  "types": "../dist/tsc/api/memory.d.ts"
+}
