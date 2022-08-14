@@ -81,6 +81,8 @@ export type SagaContext = Cancellable & {
     ...args: A
   ): ReturnType<F>;
 
+  spawn<A extends any[] = [], R = any>(saga: Saga<A, R>, ...args: A): Task<R>;
+
   callback<A extends any[]>(fn: (...args: A) => void): (...args: A) => void;
 
   delay(): Promise<void>;
@@ -833,6 +835,13 @@ const createTaskContext = (
       return listen(listenables, context, (context, signal) =>
         saga(context, signal, ...args)
       );
+    },
+    spawn(saga, ...args) {
+      const task = spawn((c) => {
+        c.onError((error) => throwError(context, error));
+        return saga(c, ...args);
+      });
+      return task;
     },
     debounce(
       ms: number,
