@@ -11,6 +11,7 @@ import {
   ReactNode,
   RefAttributes,
   RefObject,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -441,6 +442,14 @@ const SlotInner = memo((props: { render: () => any; token: any }) => {
     dependencies: new Map<any, Function>(),
     rerender: () => rerender({}),
   }))[0];
+
+  useEffect(
+    () => () => {
+      context.dependencies.forEach((x) => x());
+      context.dependencies.clear();
+    },
+    [context]
+  );
 
   return collectDependencies(
     props.render,
