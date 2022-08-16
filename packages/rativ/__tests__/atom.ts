@@ -212,3 +212,11 @@ test("nested", () => {
   const a1 = atom({ p1: { p2: { p3: true } } });
   expect(a1("p1.p2.p3")).toBeTruthy();
 });
+
+test("set value multiple times", async () => {
+  const a = atom(0);
+  a.set(delay(20, 1));
+  a.set(delay(30, 2));
+  await delay(30);
+  expect(a.state).toBe(2);
+});
