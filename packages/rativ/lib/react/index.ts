@@ -437,26 +437,7 @@ const createStableComponent = <P extends Record<string, any>, R extends Refs>(
 };
 
 const SlotInner = memo((props: { render: () => any; token: any }) => {
-  const rerender = useState<any>()[1];
-  const context = useState(() => ({
-    dependencies: new Map<any, Function>(),
-    rerender: () => rerender({}),
-  }))[0];
-
-  useEffect(
-    () => () => {
-      context.dependencies.forEach((x) => x());
-      context.dependencies.clear();
-    },
-    [context]
-  );
-
-  return collectDependencies(
-    props.render,
-    context.dependencies,
-    context.rerender,
-    { type: "component" }
-  );
+  return useReactive(props.render);
 });
 
 const SlotWrapper: FC<{ slot: any }> = (props) => {
@@ -664,6 +645,34 @@ const createStableFunction = (
   };
 };
 
+/**
+ * the host component will be re-rendered whenever reactive value changed
+ * @param reactiveFn
+ * @returns
+ */
+const useReactive = <T>(reactiveFn: () => T) => {
+  const rerender = useState<any>()[1];
+  const context = useState(() => ({
+    dependencies: new Map<any, Function>(),
+    rerender: () => rerender({}),
+  }))[0];
+
+  useEffect(
+    () => () => {
+      context.dependencies.forEach((x) => x());
+      context.dependencies.clear();
+    },
+    [context]
+  );
+
+  return collectDependencies(
+    reactiveFn,
+    context.dependencies,
+    context.rerender,
+    { type: "component" }
+  );
+};
+
 export {
   createEffect as effect,
   createSlot as slot,
@@ -672,4 +681,5 @@ export {
   createDirective as directive,
   createStableComponent as stable,
   createComponentBuilder as create,
+  useReactive,
 };
