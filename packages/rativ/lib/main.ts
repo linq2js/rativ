@@ -318,7 +318,6 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       storage.task = nextState
         .then((value) => {
           if (storage.changeToken !== token || cancelled) return;
-          console.log("done", value);
           changeStatus(false, undefined, value);
         })
         .catch((error) => {

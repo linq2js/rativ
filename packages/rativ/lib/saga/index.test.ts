@@ -488,7 +488,7 @@ test("debounce #2 ", async () => {
   };
   const startSearchingSaga = async ({ call, set }: SC) => {
     const result = call(searchSaga);
-    set(searchRepoResultAtom, result);
+    await set(searchRepoResultAtom, result);
   };
 
   const onSearchTermChanged = async ({ race }: SC) => {
@@ -570,7 +570,7 @@ test("error handling #4", async () => {
   };
   spawn(async ({ onError, set }) => {
     onError((x) => (error = x));
-    set(count, increment());
+    await set(count, increment());
     expect(count.loading).toBeTruthy();
   });
 

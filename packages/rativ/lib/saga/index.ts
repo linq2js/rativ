@@ -774,7 +774,6 @@ const createTaskContext = (
             atom.on("error", (e) => {
               e.rollback();
               reject(e.error);
-              throwError(context, e.error);
             })
           );
 
@@ -787,7 +786,6 @@ const createTaskContext = (
             })
           );
         });
-        context.fork(() => promise);
         return promise;
       } else {
         if (atom.error) throw atom.error;
