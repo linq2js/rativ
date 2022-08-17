@@ -800,7 +800,6 @@ const createTaskContext = (
             atom.on("error", (e) => {
               e.rollback();
               reject(e.error);
-              throwError(context, e.error);
             })
           );
 
