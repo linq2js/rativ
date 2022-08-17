@@ -422,6 +422,8 @@ test("infinite", async () => {
     await infinite(async () => {
       await when(clicked);
       count++;
+      if (count === 3) return false;
+      return true;
     });
   });
 
@@ -432,6 +434,14 @@ test("infinite", async () => {
   clicked();
   await delay();
   expect(count).toBe(2);
+
+  clicked();
+  await delay();
+  expect(count).toBe(3);
+
+  clicked();
+  await delay();
+  expect(count).toBe(3);
 
   clicked();
   await delay();

@@ -282,7 +282,7 @@ const createSignal: CreateSignal = (emitter?: SignalEmitter<void>): any => {
         throw new Error("Cannot emit the signal manually");
       }
       payload = value;
-      emittable.emit();
+      emittable.emit(payload);
     },
     {
       [isSignalProp]: true,
@@ -908,7 +908,7 @@ const createTaskContext = (
         const result = callback(...args);
         if (result === false) return;
         if (isPromiseLike(result)) {
-          return result.finally(next);
+          return result.then((resolved) => resolved !== false && next());
         }
         return next();
       };
