@@ -1,4 +1,3 @@
-import { Updater } from "./asyncUpdate";
 import { FieldPath, FieldPathValue } from "./pathTypes";
 
 export type AnyFunc = (...args: any[]) => any;
@@ -78,17 +77,19 @@ export type GetFn<T> = {
 };
 
 export type SetFn<T> = {
-  (): Updater<
-    T,
-    | Mutation<T>[]
-    | [
-        | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
-        | T
-        | Promise<T>
-        | Awaiter<T>
-      ]
-  >;
-
+  (): [
+    (
+      ...args:
+        | Mutation<T>[]
+        | [
+            | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+            | T
+            | Promise<T>
+            | Awaiter<T>
+          ]
+    ) => VoidFunction,
+    VoidFunction
+  ];
   /**
    * update current state of the atom by using specfied mutations
    * @param mutations

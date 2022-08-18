@@ -2,7 +2,7 @@ import { mutate } from "./mutation";
 import { createCallbackGroup } from "./util/createCallbackGroup";
 import { isPromiseLike } from "./util/isPromiseLike";
 import { delay } from "./util/delay";
-import { asyncUpdate } from "./util/asyncUpdate";
+
 import {
   collectDependencies,
   currentScope,
@@ -284,7 +284,19 @@ const createAtom: CreateAtom = (...args: any[]): any => {
 
   const set = (...args: any[]): any => {
     if (!args.length) {
-      return asyncUpdate(storage.state, () => storage.changeToken, set);
+      changeStatus(true, undefined, storage.state);
+      const token = (storage.changeToken = {});
+
+      return [
+        (...args: any[]) => {
+          if (token !== storage.changeToken) return;
+          set(...args);
+        },
+        () => {
+          if (token !== storage.changeToken) return;
+          changeStatus(false, undefined, storage.state);
+        },
+      ];
     }
 
     let nextState: any;

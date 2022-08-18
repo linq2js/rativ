@@ -7,19 +7,19 @@ export type Updater<T, A extends any[]> = {
 
 const asyncUpdate = <T, A extends any[]>(
   current: T,
-  getSnapshot: () => any,
+  getCurrentSnapshot: () => any,
   dispatchUpdate: (...args: A) => T
 ): Updater<T, A> => {
-  let originalVersion = getSnapshot();
+  let currentSnapshot = getCurrentSnapshot();
   const getValue = () => current;
-  const isStale = () => getSnapshot() !== originalVersion;
+  const isStale = () => getCurrentSnapshot() !== currentSnapshot;
   const update = (...args: A) => {
     if (isStale()) return;
     current = dispatchUpdate(...args);
-    originalVersion = getSnapshot();
+    currentSnapshot = getCurrentSnapshot();
   };
   const cancel = () => {
-    originalVersion = {};
+    currentSnapshot = {};
   };
   return {
     getValue,
