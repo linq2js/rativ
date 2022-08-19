@@ -33,6 +33,11 @@ import { isErrorHandled } from "./util/errorHandling";
 const isAtomProp = "$$atom";
 export type CreateAtom = {
   /**
+   * create an updatable atom, the atom accepts any type of state
+   */
+  (): UpdatableAtom<void | any>;
+
+  /**
    * create computed atom
    */
   <T>(
@@ -785,7 +790,11 @@ const isAwaiter = <T>(value: any): value is Awaiter<T> => {
   return value && value.$$type === "awaiter";
 };
 
-const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
+const createAwaiter: Wait = (
+  input: any,
+  fn?: Function,
+  ...args: any[]
+): any => {
   const scope = currentScope;
 
   if (!scope) {
@@ -826,7 +835,9 @@ const createAwaiter: Wait = (input: any, fn: Function, ...args: any[]): any => {
           if (count >= awaitables.length) {
             done = true;
             scopeOfWork(() => {
-              const next = fn(resultSelector(values), ...args);
+              const next = fn
+                ? fn(resultSelector(values), ...args)
+                : resultSelector(values);
               if (isAwaiter(next)) {
                 resolve(next.promise);
               } else {

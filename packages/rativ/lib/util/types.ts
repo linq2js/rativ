@@ -1,3 +1,4 @@
+import { Awaitable } from "../saga";
 import { FieldPath, FieldPathValue } from "./pathTypes";
 
 export type AnyFunc = (...args: any[]) => any;
@@ -206,11 +207,14 @@ export type ComputedAtom<T> = UpdatableAtom<T>;
 export type Awaiter<T> = { $$type: "awaiter"; promise: Promise<T> };
 
 export type Wait = {
+  <A>(awaitable: Atom<A> | Awaitable<A> | Promise<A>): Awaiter<A>;
+
   <A, T, P extends any[]>(
-    awaitable: Atom<A> | Promise<A>,
+    awaitable: Atom<A> | Awaitable<A> | Promise<A>,
     fn: (value: A, ...args: P) => T | Awaiter<T>,
     ...args: P
   ): T extends Promise<any> ? never : Awaiter<T>;
+
   <A extends { [key: number]: Atom | Promise<any> }, T, P extends any[]>(
     awaitables: A,
     fn: (

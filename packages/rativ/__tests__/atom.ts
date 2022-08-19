@@ -121,7 +121,7 @@ test("toJSON", () => {
 
 test("async computed atom #2", async () => {
   let updateCount = 0;
-  const count = atom(() => wait(delay(10), () => 100), { key: "count" });
+  const count = atom(() => wait(delay(10, 100), (x) => x), { key: "count" });
   const factor = atom(1, { key: "factor" });
   const result = atom(
     () => wait([count, factor], ([count, factor]) => count * factor),
