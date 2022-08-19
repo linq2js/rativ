@@ -328,8 +328,6 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       );
     }
 
-    if (storage.state === nextState) return noop;
-
     if (isPromiseLike(nextState)) {
       let token: any;
       let cancelled = false;
