@@ -78,19 +78,6 @@ export type GetFn<T> = {
 };
 
 export type SetFn<T> = {
-  (): [
-    (
-      ...args:
-        | [Mutation<T>, ...Mutation<T>[]]
-        | [
-            | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
-            | T
-            | Promise<T>
-            | Awaiter<T>
-          ]
-    ) => VoidFunction,
-    VoidFunction
-  ];
   /**
    * update current state of the atom by using specfied mutations
    * @param mutations
@@ -117,6 +104,20 @@ export type UpdatableAtom<T = any> = GetFn<T> &
      */
     state: T;
     readonly set: SetFn<T>;
+
+    defer(): [
+      (
+        ...args:
+          | [Mutation<T>, ...Mutation<T>[]]
+          | [
+              | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+              | T
+              | Promise<T>
+              | Awaiter<T>
+            ]
+      ) => VoidFunction,
+      VoidFunction
+    ];
 
     cancel(): void;
 

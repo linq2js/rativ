@@ -289,25 +289,6 @@ const createAtom: CreateAtom = (...args: any[]): any => {
   };
 
   const set = (...args: any[]): any => {
-    if (!args.length) {
-      changeStatus(true, undefined, storage.state);
-      const token = (storage.changeToken = {});
-
-      return [
-        (...args: any[]) => {
-          if (token !== storage.changeToken) return;
-          if (!args.length) {
-            return set(undefined);
-          }
-          return set(...args);
-        },
-        () => {
-          if (token !== storage.changeToken) return;
-          changeStatus(false, undefined, storage.state);
-        },
-      ];
-    }
-
     let nextState: any;
 
     if (typeof args[0] === "function") {
@@ -370,6 +351,24 @@ const createAtom: CreateAtom = (...args: any[]): any => {
     get,
     on,
     abort,
+    defer() {
+      changeStatus(true, undefined, storage.state);
+      const token = (storage.changeToken = {});
+
+      return [
+        (...args: any[]) => {
+          if (token !== storage.changeToken) return;
+          if (!args.length) {
+            return set(undefined);
+          }
+          return set(...args);
+        },
+        () => {
+          if (token !== storage.changeToken) return;
+          changeStatus(false, undefined, storage.state);
+        },
+      ];
+    },
     toJSON() {
       return storage.state;
     },

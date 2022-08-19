@@ -149,12 +149,12 @@ test("async computed atom #2", async () => {
 test("updater", async () => {
   const count = atom(1);
   const update1 = async () => {
-    const [update] = count.set();
+    const [update] = count.defer();
     await delay(10);
     update(1);
   };
   const update2 = () => {
-    const [update] = count.set();
+    const [update] = count.defer();
     update(2);
   };
 
