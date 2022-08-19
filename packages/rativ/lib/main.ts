@@ -296,7 +296,10 @@ const createAtom: CreateAtom = (...args: any[]): any => {
       return [
         (...args: any[]) => {
           if (token !== storage.changeToken) return;
-          set(...args);
+          if (!args.length) {
+            return set(undefined);
+          }
+          return set(...args);
         },
         () => {
           if (token !== storage.changeToken) return;

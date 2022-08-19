@@ -81,7 +81,7 @@ export type SetFn<T> = {
   (): [
     (
       ...args:
-        | Mutation<T>[]
+        | [Mutation<T>, ...Mutation<T>[]]
         | [
             | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
             | T
@@ -95,7 +95,7 @@ export type SetFn<T> = {
    * update current state of the atom by using specfied mutations
    * @param mutations
    */
-  (...mutations: Mutation<T>[]): VoidFunction;
+  (mutation: Mutation<T>, ...mutations: Mutation<T>[]): VoidFunction;
 
   /**
    * update current state of the atom
