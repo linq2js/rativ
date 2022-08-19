@@ -32,10 +32,7 @@ import { isErrorHandled } from "./util/errorHandling";
 
 const isAtomProp = "$$atom";
 export type CreateAtom = {
-  /**
-   * create an updatable atom, the atom accepts any type of state
-   */
-  (): UpdatableAtom<void | any>;
+  (): UpdatableAtom<boolean>;
 
   /**
    * create computed atom
@@ -123,6 +120,10 @@ export type WatchOptions<T> = {
 const noop = () => {};
 
 const createAtom: CreateAtom = (...args: any[]): any => {
+  if (!args.length) {
+    args[0] = false;
+  }
+
   const allListeners = {
     emit: createCallbackGroup(),
     state: createCallbackGroup(),
