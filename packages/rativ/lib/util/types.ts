@@ -77,25 +77,29 @@ export type GetFn<T> = {
   <K extends FieldPath<T>>(path: K): FieldPathValue<T, K>;
 };
 
-export type SetFn<T> = {
-  /**
-   * update current state of the atom by using specfied mutations
-   * @param mutations
-   */
-  (mutation: Mutation<T>, ...mutations: Mutation<T>[]): VoidFunction;
+export type SetFn<T> = void extends T
+  ? {
+      (): VoidFunction;
+    }
+  : {
+      /**
+       * update current state of the atom by using specfied mutations
+       * @param mutations
+       */
+      (mutation: Mutation<T>, ...mutations: Mutation<T>[]): VoidFunction;
 
-  /**
-   * update current state of the atom
-   * @param state
-   */
-  (
-    state:
-      | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
-      | T
-      | Promise<T>
-      | Awaiter<T>
-  ): VoidFunction;
-};
+      /**
+       * update current state of the atom
+       * @param state
+       */
+      (
+        state:
+          | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+          | T
+          | Promise<T>
+          | Awaiter<T>
+      ): VoidFunction;
+    };
 
 export type UpdatableAtom<T = any> = GetFn<T> &
   Omit<Atom<T>, "state"> & {
@@ -105,17 +109,23 @@ export type UpdatableAtom<T = any> = GetFn<T> &
     state: T;
     readonly set: SetFn<T>;
 
+    /**
+     * return a tuple of [updateStateFn(newState), cancelUpdateFn]
+     * when defer() is called, the prop loading = true, after updateStateFn is called the prop loading = false
+     */
     defer(): [
-      (
-        ...args:
-          | [Mutation<T>, ...Mutation<T>[]]
-          | [
-              | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
-              | T
-              | Promise<T>
-              | Awaiter<T>
-            ]
-      ) => VoidFunction,
+      void extends T
+        ? VoidFunction
+        : (
+            ...args:
+              | [Mutation<T>, ...Mutation<T>[]]
+              | [
+                  | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+                  | T
+                  | Promise<T>
+                  | Awaiter<T>
+                ]
+          ) => VoidFunction,
       VoidFunction
     ];
 

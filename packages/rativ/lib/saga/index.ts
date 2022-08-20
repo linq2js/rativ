@@ -766,7 +766,7 @@ const createTaskContext = (
       });
     },
     set(atom, ...args) {
-      const cancelUpdate = atom.set(...args);
+      const cancelUpdate = (atom.set as Function)(...args);
       onCancel.add(cancelUpdate);
       if (atom.loading) {
         const promise = new Promise<void>((resolve, reject) => {

@@ -221,3 +221,9 @@ test("set value multiple times", async () => {
   await delay(30);
   expect(a.state).toBe(2);
 });
+
+test("void atom", () => {
+  const voidAtom = atom();
+  const [onDone] = voidAtom.defer();
+  onDone();
+});

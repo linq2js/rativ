@@ -32,7 +32,7 @@ import { isErrorHandled } from "./util/errorHandling";
 
 const isAtomProp = "$$atom";
 export type CreateAtom = {
-  (): UpdatableAtom<boolean>;
+  (): UpdatableAtom<void>;
 
   /**
    * create computed atom
@@ -359,7 +359,7 @@ const createAtom: CreateAtom = (...args: any[]): any => {
         (...args: any[]) => {
           if (token !== storage.changeToken) return;
           if (!args.length) {
-            return set(undefined);
+            return set(storage.state);
           }
           return set(...args);
         },
