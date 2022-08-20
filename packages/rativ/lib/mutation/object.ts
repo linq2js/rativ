@@ -24,6 +24,11 @@ const prop = <T, P extends keyof T>(
     if (!prev) return prev;
     const next = mutations.reduce((p, m) => m(p), prev[name]);
     if (next === prev[name]) return prev;
+    if (Array.isArray(prev)) {
+      const nextObj = [...prev] as unknown as T;
+      nextObj[name] = next;
+      return nextObj;
+    }
     return { ...prev, [name]: next };
   };
 };

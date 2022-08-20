@@ -14,6 +14,12 @@ import {
   item,
 } from "../lib/mutation";
 
+test("set array item", () => {
+  const value = atom<number[]>([]);
+  value.set(prop(1, () => 1));
+  expect(value()).toEqual([undefined, 1]);
+});
+
 test("array item", () => {
   const value = atom([{ current: 1 }]);
 
