@@ -1,4 +1,4 @@
-import { Mutation, Nullable } from "../main";
+import { Mutation, NoInfer, Nullable } from "../main";
 
 export type Move = {
   <
@@ -68,11 +68,11 @@ const item = <T>(
   };
 };
 
-const push = <T>(...values: T[]): Mutation<Nullable<T[]>, T[]> => {
+const push = <T>(...values: NoInfer<T>[]): Mutation<Nullable<T[]>, T[]> => {
   return (prev) => (prev ?? []).concat(values);
 };
 
-const unshift = <T>(...values: T[]): Mutation<Nullable<T[]>, T[]> => {
+const unshift = <T>(...values: NoInfer<T>[]): Mutation<Nullable<T[]>, T[]> => {
   return (prev) => values.concat(prev ?? []);
 };
 
@@ -165,7 +165,7 @@ const splice =
   >(
     index: number,
     deleteCount?: number,
-    insert?: I[]
+    insert?: NoInfer<I>[]
   ): Mutation<T> =>
   (prev) => {
     const nothingToDelete = !deleteCount;
@@ -185,7 +185,7 @@ const insert = <
   I extends T extends Nullable<Array<infer I>> ? I : never
 >(
   index: number,
-  items: I[]
+  items: NoInfer<I>[]
 ): Mutation<T> => splice(index, 0, items);
 
 const slice =
