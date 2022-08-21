@@ -898,9 +898,9 @@ export type Rearg = {
   (func: Function, skip: number): (...args: any[]) => any;
 };
 
-const rearg = (
+const rearg: Rearg = (
   func: Function,
-  skipOrIndexes: number | number[]
+  skipOrIndexes
 ): ((...args: any[]) => any) => {
   if (Array.isArray(skipOrIndexes)) {
     return (...args: any[]) => func(...skipOrIndexes.map((i) => args[i]));
