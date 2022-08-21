@@ -579,3 +579,19 @@ test("error handling #4", async () => {
   expect(error).toBe("invalid");
   expect(count()).toBe(0);
 });
+
+test("custom listenable", async () => {
+  let unsubscribed = false;
+  let expectedPayload = 0;
+  const myListenable = (listener: (payload: number) => void) => {
+    delay(10).then(() => listener(1));
+    return () => (unsubscribed = true);
+  };
+  const task = spawn(({ listenable, on }) => {
+    on(listenable(myListenable), (_, payload) => (expectedPayload = payload));
+  });
+  await delay(15);
+  task.cancel();
+  expect(expectedPayload).toBe(1);
+  expect(unsubscribed).toBeTruthy();
+});

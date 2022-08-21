@@ -108,6 +108,14 @@ export type SagaContext = Cancellable & {
     ...args: A
   ): ContinuousTask;
 
+  /**
+   * create a signal from listenable
+   * @param listenable
+   */
+  listenable<T>(
+    listenable: (listener: (payload: T) => void) => VoidFunction
+  ): CustomSignal<T>;
+
   debounce<T, A extends any[]>(
     ms: number,
     listenable: Listenable<T>,
@@ -308,14 +316,15 @@ const createSignal: CreateSignal = (emitter?: SignalEmitter<void>): any => {
       emittable.clear();
       return signal;
     };
-    const emit = (payload: void) => {
+    const emit = (p: void) => {
       if (status !== "active") {
         if (status === "pausing") {
-          queue.push(payload);
+          queue.push(p);
         }
         return;
       }
-      emittable.emit(payload);
+      payload = p;
+      emittable.emit(p);
     };
     const start = (flush?: boolean) => {
       if (status === "active") {
@@ -341,7 +350,6 @@ const createSignal: CreateSignal = (emitter?: SignalEmitter<void>): any => {
     };
 
     Object.assign(signal, { start, status: () => status, pause, end });
-    start();
   }
 
   return signal;
@@ -833,6 +841,11 @@ const createTaskContext = (
       return listen(listenables, context, (context, signal) =>
         saga(context, signal, ...args)
       );
+    },
+    listenable(listenable) {
+      const signal = createSignal(listenable);
+      onDispose.add(signal.end);
+      return signal.start();
     },
     spawn(saga, ...args) {
       const task = spawn((c) => {
