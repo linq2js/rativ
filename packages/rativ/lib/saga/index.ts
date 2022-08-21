@@ -340,7 +340,8 @@ const createSignal: CreateSignal = (emitter?: SignalEmitter<void>): any => {
       return signal;
     };
 
-    return Object.assign(signal, { start, status: () => status, pause, end });
+    Object.assign(signal, { start, status: () => status, pause, end });
+    start();
   }
 
   return signal;
