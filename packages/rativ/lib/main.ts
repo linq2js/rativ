@@ -886,6 +886,30 @@ const throws = (error: string | Error): never => {
   throw error;
 };
 
+export type Rearg = {
+  /**
+   * Creates a function that invokes `func` with arguments arranged according to the specified indexes where the argument value at the first index is provided as the first argument, the argument value at the second index is provided as the second argument, and so on.
+   */
+  (func: Function, indexes: number[]): (...args: any[]) => any;
+
+  /**
+   * Creates a function that invokes `func` with arguments that are selected from input arguments after skipped N arguments.
+   */
+  (func: Function, skip: number): (...args: any[]) => any;
+};
+
+const rearg = (
+  func: Function,
+  skipOrIndexes: number | number[]
+): ((...args: any[]) => any) => {
+  if (Array.isArray(skipOrIndexes)) {
+    return (...args: any[]) => func(...skipOrIndexes.map((i) => args[i]));
+  }
+  return (...args: any[]) => {
+    return func(...args.slice(skipOrIndexes));
+  };
+};
+
 export * from "./util/types";
 
 export {
@@ -898,4 +922,5 @@ export {
   createSnapshot as snapshot,
   createAwaiter as wait,
   throws,
+  rearg,
 };
