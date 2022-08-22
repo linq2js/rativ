@@ -78,7 +78,6 @@ export type GetFn<T> = {
 };
 
 export type SetFn<T> = {
-  (value: void extends T ? void : never): VoidFunction;
   /**
    * update current state of the atom by using specfied mutations
    * @param mutations
