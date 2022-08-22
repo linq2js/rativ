@@ -512,6 +512,14 @@ test("debounce #2 ", async () => {
   expect(results).toEqual([2, 3]);
 });
 
+test("set", () => {
+  const a = atom<unknown>(1);
+  spawn(({ set }) => {
+    const value: any = 1;
+    set(a, value);
+  });
+});
+
 test("error handling #1", () => {
   let error: any;
   spawn(({ onError }) => {

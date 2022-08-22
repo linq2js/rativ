@@ -77,29 +77,26 @@ export type GetFn<T> = {
   <K extends FieldPath<T>>(path: K): FieldPathValue<T, K>;
 };
 
-export type SetFn<T> = void extends T
-  ? {
-      (): VoidFunction;
-    }
-  : {
-      /**
-       * update current state of the atom by using specfied mutations
-       * @param mutations
-       */
-      (mutation: Mutation<T>, ...mutations: Mutation<T>[]): VoidFunction;
+export type SetFn<T> = {
+  (value: void extends T ? void : never): VoidFunction;
+  /**
+   * update current state of the atom by using specfied mutations
+   * @param mutations
+   */
+  (mutation: Mutation<T>, ...mutations: Mutation<T>[]): VoidFunction;
 
-      /**
-       * update current state of the atom
-       * @param state
-       */
-      (
-        state:
-          | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
-          | T
-          | Promise<T>
-          | Awaiter<T>
-      ): VoidFunction;
-    };
+  /**
+   * update current state of the atom
+   * @param state
+   */
+  (
+    state:
+      | ((prev: T, context: Context) => T | Promise<T> | Awaiter<T>)
+      | T
+      | Promise<T>
+      | Awaiter<T>
+  ): VoidFunction;
+};
 
 export type UpdatableAtom<T = any> = GetFn<T> &
   Omit<Atom<T>, "state"> & {
