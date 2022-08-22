@@ -33,6 +33,39 @@ const prop = <T, P extends keyof T>(
   };
 };
 
+const merge = <T>(
+  props: NoInfer<
+    T extends Array<infer I>
+      ? { [key: number]: I }
+      : { [key in keyof T]?: T[key] }
+  >
+): Mutation<T> => {
+  return (prev): any => {
+    if (!prev) return prev;
+    let next: any = prev;
+    if (Array.isArray(prev)) {
+      Object.entries(props).forEach(([key, value]) => {
+        const index = parseInt(key, 10);
+        if (next[index] === value) return;
+        if (next === prev) {
+          next = [...next];
+        }
+        next[index] = value;
+      });
+    } else {
+      Object.entries(props).forEach(([key, value]) => {
+        if (next[key] === value) return;
+        if (next === prev) {
+          next = { ...next };
+        }
+        next[key] = value;
+      });
+    }
+
+    return next;
+  };
+};
+
 const swap =
   <T, P extends keyof T>(from: P, to: P): Mutation<T> =>
   (prev) => {
@@ -64,4 +97,4 @@ const unset =
     return next;
   };
 
-export { nonNull, unset, swap, prop };
+export { nonNull, unset, swap, prop, merge };

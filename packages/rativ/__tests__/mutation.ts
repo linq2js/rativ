@@ -12,12 +12,26 @@ import {
   move,
   mutate,
   item,
+  merge,
 } from "../lib/mutation";
 
 test("set array item", () => {
   const value = atom<number[]>([]);
   value.set(prop(1, () => 1));
   expect(value()).toEqual([undefined, 1]);
+});
+
+test("merge", () => {
+  const v1i = { p1: true, p2: {}, p3: 1 };
+  const v1 = atom(v1i);
+  v1.set(merge({ p1: false, p3: 2 }));
+
+  expect(v1()).toEqual({ p1: false, p3: 2, p2: v1i.p2 });
+
+  const v2i = [1, 2, 3, 4];
+  const v2 = atom(v2i);
+  v2.set(merge({ 1: 1, "2": 4 }));
+  expect(v2()).toEqual([1, 1, 4, 4]);
 });
 
 test("array item", () => {

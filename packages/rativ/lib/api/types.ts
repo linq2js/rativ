@@ -13,6 +13,7 @@ export interface HttpOptions {
   url: string;
   method?: HttpMethod;
   headers?: Dictionary;
+  extra?: any;
   query?: Dictionary;
   body?: any;
   abortController?: AbortController;
@@ -51,6 +52,7 @@ export interface HttpConfigs<P = any> {
    * Custom HTTP driver
    */
   driver?: HttpDriver;
+  retry?: RetryOptions | boolean;
 }
 
 export interface Configs {
@@ -59,5 +61,12 @@ export interface Configs {
   dismissErrors?: boolean;
   [key: string]: any;
 }
+
+export type RetryOptions = {
+  when?: (error: Error) => boolean;
+  retries?: number;
+  delay?: number | ((retry: VoidFunction) => void);
+  onRetry?: VoidFunction;
+};
 
 export type Resolver<P, R> = (context: ApiContext) => Saga<[P], R>;

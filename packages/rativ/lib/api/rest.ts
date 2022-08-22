@@ -12,6 +12,7 @@ import { getOption } from "./getOption";
 
 export interface RestOptions<P = any> extends Omit<HttpConfigs<P>, "baseUrl"> {
   method?: HttpMethod;
+  extra?: any;
   convertPayloadTo?: "query" | "params" | "body";
   onError?(error: RestError): void;
   params?: OptionFactory<P, Dictionary>;
@@ -41,6 +42,16 @@ const create =
       payload?: P
     ): Promise<R> => {
       const convertPayloadTo = options?.convertPayloadTo;
+      let retries = 0;
+      const retryOptions =
+        options?.retry === false
+          ? false
+          : {
+              ...(typeof configs.http?.retry === "object"
+                ? configs.http?.retry
+                : {}),
+              ...(typeof options?.retry === "object" ? options?.retry : {}),
+            };
       const headers: Dictionary = {
         ...getOption(configs.http?.headers, payload),
         ...getOption(restConfigs?.headers, payload),
@@ -61,34 +72,74 @@ const create =
           ? payload
           : getOption(options?.body, payload);
 
-      try {
-        const res = await http({
-          url: `${baseUrl}${getOption(url, payload)}`.replace(
-            /\{([^{}]+)\}/g,
-            (_, k) => params[k] ?? ""
-          ),
-          method: options?.method ?? "get",
-          headers,
-          query,
-          body,
-          abortController: abortController(),
-        });
+      const ac = abortController();
 
-        return res.data as R;
-      } catch (e) {
-        const error = new RestError(e);
-        configs.onError?.(error);
-        restConfigs?.onError?.(error);
-        options?.onError?.(error);
-        if (
-          options?.dismissErrors ||
-          restConfigs?.dismissErrors ||
-          configs.dismissErrors
-        ) {
-          return forever;
-        }
-        throw e;
-      }
+      return new Promise<R>((resolve, reject) => {
+        const request = async () => {
+          if (ac?.signal.aborted) return;
+
+          try {
+            const res = await http({
+              url: `${baseUrl}${getOption(url, payload)}`.replace(
+                /\{([^{}]+)\}/g,
+                (_, k) => params[k] ?? ""
+              ),
+              extra: options?.extra,
+              method: options?.method ?? "get",
+              headers,
+              query,
+              body,
+              abortController: ac,
+            });
+
+            return resolve(res.data as R);
+          } catch (e) {
+            const error = new RestError(e);
+            if (retryOptions) {
+              const {
+                retries: maxRetries = 1,
+                delay = 0,
+                onRetry,
+                when,
+              } = retryOptions;
+
+              if (retries < maxRetries && (!when || when(error))) {
+                retries++;
+                onRetry?.();
+                if (delay) {
+                  // custom delay fn
+                  if (typeof delay === "function") {
+                    delay(request);
+                  } else {
+                    setTimeout(request, delay);
+                  }
+
+                  return;
+                }
+                request();
+                return;
+              }
+            }
+
+            configs.onError?.(error);
+            restConfigs?.onError?.(error);
+            options?.onError?.(error);
+
+            const dismissErrors =
+              options?.dismissErrors ||
+              restConfigs?.dismissErrors ||
+              configs.dismissErrors;
+
+            if (dismissErrors) {
+              return forever;
+            }
+
+            reject(e);
+          }
+        };
+
+        request();
+      });
     }) as any;
   };
 
