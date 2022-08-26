@@ -321,7 +321,8 @@ Async counter example
 import { delay, atom, slot } from "rativ";
 
 const count = atom(0);
-const increment = () => count.set((prev) => delay(1000).then(() => prev + 1));
+const incrementAsync = () =>
+  count.set((prev) => delay(1000).then(() => prev + 1));
 
 const CounterWithoutSlot = stable(() => {
   // a promise object will be thrown if trying access state of processing atom
@@ -535,7 +536,7 @@ reverCount1();
 count.state; // count = 1
 count.state++; // count = 2
 // create a snapshot with initial state
-const revertCount2 = count.snapshort(true);
+const revertCount2 = count.snapshot(true);
 count.state; // count = 0
 reverCount1();
 count.state; // count = 2
