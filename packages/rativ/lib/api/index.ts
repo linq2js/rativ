@@ -1,11 +1,14 @@
 import { ApiContext, Configs, Dictionary, Resolver } from "./types";
 import { http as defaultHttp } from "./http";
-import { Saga } from "../saga";
+import { isSagaContext, SagaContext, spawn } from "../saga";
 export * from "./types";
 
 export type Mappings<T> = {
   [key in keyof T]: T[key] extends Resolver<infer P, infer R>
-    ? Saga<[P], R>
+    ? {
+        (payload: P): Promise<R>;
+        (context: SagaContext, payload: P): Promise<R>;
+      }
     : never;
 };
 
@@ -23,7 +26,14 @@ const define = <T extends Definitions>({
   const shared = new Map();
   const context: ApiContext = { configs, http: customHttp, shared, mappings };
   Object.keys(resolvers).forEach((key) => {
-    mappings[key] = resolvers[key](context);
+    const saga = resolvers[key](context);
+    mappings[key] = (...args: any[]) => {
+      if (isSagaContext(args[0])) {
+        return saga(...args);
+      }
+      const task = spawn(saga, args[0]);
+      return task.promise;
+    };
   });
   return mappings as Mappings<T>;
 };

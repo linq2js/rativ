@@ -52,7 +52,6 @@
   "peerDependenciesMeta": {},
   "scripts": {
     "prepublishOnly": "yarn test && yarn && yarn build",
-    "lint": "eslint lib/ --ext .js,.jsx,.ts,.tsx",
     "test": "jest --passWithNoTests --runInBand",
     "clean": "rm -rf dist build package",
     "ts-node": "ts-node",

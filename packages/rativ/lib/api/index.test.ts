@@ -33,6 +33,16 @@ test("rest api", async () => {
   await expect(result().then((x) => x.id)).resolves.toBe(1);
 });
 
+test("rest api call directly", async () => {
+  const api = define({
+    test: rest<void, { id: number }>(
+      "https://jsonplaceholder.typicode.com/todos/1"
+    ),
+  });
+  const result = await api.test();
+  expect(result.id).toBe(1);
+});
+
 test("retry #1", async () => {
   let retries = 0;
   const errors = [

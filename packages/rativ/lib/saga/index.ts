@@ -214,6 +214,7 @@ export type Task<T = void> = Cancellable &
     result(): T;
     status(): TaskStatus;
     error(): any;
+    readonly promise?: Promise<T>;
   };
 
 export type Signal<T = void> = Awaitable<T> & {
@@ -247,6 +248,7 @@ const isCancellableProp = "$$cancellable";
 const isEmittableProp = "$$emittable";
 const isTaskProp = "$$task";
 const isSignalProp = "$$signal";
+const isSagaContextProp = "$$sagaContext";
 const noop = () => {};
 const forever = new Promise<any>(noop);
 
@@ -434,7 +436,7 @@ const createTask = <T = void>(
     emittable.emit();
   };
 
-  return Object.assign(
+  const task = Object.assign(
     () => {
       if (status !== "idle") return promise;
       status = "running";
@@ -484,6 +486,12 @@ const createTask = <T = void>(
       error: () => error,
     }
   );
+
+  Object.defineProperty(task, "promise", {
+    get: () => promise,
+  });
+
+  return task;
 };
 
 const spawn = <A extends any[] = [], R = any>(
@@ -930,6 +938,7 @@ const createTaskContext = (
 
   Object.assign(context, {
     __fork: fork,
+    [isSagaContextProp]: true,
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -944,6 +953,8 @@ const createTaskContext = (
   return context;
 };
 
+const isSagaContext = (value: any) => value?.[isSagaContextProp];
+
 export {
   forever,
   createSignal as signal,
@@ -956,4 +967,5 @@ export {
   isAwaitable,
   isEmittable,
   isCancellable,
+  isSagaContext,
 };
