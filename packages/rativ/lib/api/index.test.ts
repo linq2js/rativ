@@ -1,5 +1,6 @@
 import { throws } from "../main";
 import { spawn } from "../saga";
+// import { define, pipe, validate } from "./";
 import { define } from "./";
 import { rest } from "./rest";
 
@@ -92,3 +93,20 @@ test("retry #2", async () => {
   await expect(result().then((x) => x.id)).rejects.toThrow("Network Error");
   expect(retries).toBe(1);
 });
+
+// test("pipe", async () => {
+//   const todoIdShouldBeGreaterThenZero = (value: number) => value > 0;
+//   const api = define({
+//     test: pipe(
+//       validate(todoIdShouldBeGreaterThenZero),
+//       rest<number, { id: number }>(
+//         "https://jsonplaceholder.typicode.com/todos/{id}",
+//         { params: (id) => ({ id }) }
+//       )
+//     ),
+//   });
+//   await expect(api.test(2).then((x) => x.id)).resolves.toEqual({ id: 2 });
+//   await expect(api.test(0).then((x) => x.id)).rejects.toThrow(
+//     "Payload is not valid"
+//   );
+// });

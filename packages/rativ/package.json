@@ -18,7 +18,8 @@
     "api": "api",
     "rest": "rest",
     "memory": "memory",
-    "react": "react"
+    "react": "react",
+    "lazy": "lazy"
   },
   "files": [
     "lib",
@@ -30,6 +31,7 @@
     "api",
     "memory",
     "rest",
+    "lazy",
     "dist/tsc"
   ],
   "keywords": [
@@ -47,7 +49,9 @@
     "state",
     "state management",
     "styled",
-    "saga"
+    "saga",
+    "lazy",
+    "loadable"
   ],
   "peerDependenciesMeta": {},
   "scripts": {

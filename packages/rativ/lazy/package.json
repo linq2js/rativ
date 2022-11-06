@@ -1,0 +1,4 @@
+{
+  "main": "../dist/tsc/lazy/index.js",
+  "types": "../dist/tsc/lazy/index.d.ts"
+}

@@ -1,0 +1,4 @@
+# ymlgen:generator pipe
+# ymlgen:output *.ts
+
+overloads: 10

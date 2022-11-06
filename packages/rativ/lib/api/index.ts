@@ -1,6 +1,7 @@
 import { ApiContext, Configs, Dictionary, Resolver } from "./types";
 import { http as defaultHttp } from "./http";
-import { isSagaContext, SagaContext, spawn } from "../saga";
+import { isSagaContext, Saga, SagaContext, spawn } from "../saga";
+import { Pipe } from "./pipeOverloads";
 export * from "./types";
 
 export type Mappings<T> = {
@@ -14,6 +15,37 @@ export type Mappings<T> = {
 
 export type Definitions = { configs?: Configs } & {
   [key: string]: any;
+};
+
+const validate =
+  <P>(
+    validator: (payload: P) => void | boolean | Promise<boolean | void>,
+    createError?: () => Error
+  ): Resolver<P, P> =>
+  (_) => {
+    return async (_: SagaContext, payload: P) => {
+      const validationResult = await validator(payload);
+      if (validationResult === false) {
+        throw createError?.() ?? new Error("Payload is not valid");
+      }
+      return payload;
+    };
+  };
+
+const pipe: Pipe = (...resolvers: Resolver<any, any>[]) => {
+  return (apiContext: ApiContext) => {
+    const combinedSaga = resolvers.reduce(
+      (prev: Saga<[any], any>, resolver) => {
+        const next = resolver(apiContext);
+        return async (sagaContext: SagaContext, payload: any) => {
+          const result = await prev(sagaContext, payload);
+          return next(sagaContext, result);
+        };
+      },
+      (_, payload) => payload
+    );
+    return combinedSaga as any;
+  };
 };
 
 const define = <T extends Definitions>({
@@ -38,4 +70,4 @@ const define = <T extends Definitions>({
   return mappings as Mappings<T>;
 };
 
-export { define };
+export { define, pipe, validate };

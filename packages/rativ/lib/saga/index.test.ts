@@ -603,3 +603,16 @@ test("custom listenable", async () => {
   expect(expectedPayload).toBe(1);
   expect(unsubscribed).toBeTruthy();
 });
+
+test("parent saga must be done after all forked sagas are done", async () => {
+  const task = spawn(({ fork }) => {
+    fork(() => delay(5));
+    fork(() => delay(15));
+  });
+
+  expect(task.status()).toBe("running");
+  await delay(10);
+  expect(task.status()).toBe("running");
+  await delay(20);
+  expect(task.status()).toBe("success");
+});

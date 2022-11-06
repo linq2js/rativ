@@ -411,14 +411,22 @@ const createTask = <T = void>(
     if (forkedTasks.length) {
       // wait until all forked task done
       if (!error) {
+        let forkedTaskDoneCount = forkedTasks.length;
+
         const handleForkedTaskDone = () => {
-          changeStatus(value, error);
+          if (forkedTaskDoneCount) {
+            forkedTaskDoneCount--;
+          }
+          if (!forkedTaskDoneCount) {
+            changeStatus(value, undefined);
+          }
         };
         forkedTasks.forEach((task) => {
           if (task.status() === "running") {
             task.on(handleForkedTaskDone);
           }
         });
+        forkedTasks.length = 0;
         return;
       }
       // cancel all forked tasks
